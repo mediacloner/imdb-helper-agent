@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import StepList from './StepList.jsx';
 
 export default function Message({ message }) {
@@ -14,7 +15,9 @@ export default function Message({ message }) {
           ...(isAssistant ? styles.assistantBubble : styles.userBubble),
         }}
       >
-        <p style={styles.content}>{content}</p>
+        <div style={styles.content} className="md-content">
+          <ReactMarkdown>{content}</ReactMarkdown>
+        </div>
 
         {isAssistant && steps && steps.length > 0 && (
           <StepList steps={steps} />
@@ -101,7 +104,6 @@ const styles = {
     margin: '0',
     fontSize: '17px',
     color: '#e0e4f0',
-    whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   },
   videoContainer: {

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from chain import QueryChain
 from graph_client import GraphClient
 from recorder import record_navigation
-from request_logger import log_entry
+from request_logger import log_entry, now_ms
 from vector_store import VectorStore
 
 load_dotenv()
@@ -115,13 +115,15 @@ async def record(request: RecordRequest) -> RecordResponse:
     """Record a Playwright video navigating through the given steps."""
     if not request.steps:
         raise HTTPException(status_code=422, detail="No steps provided")
+    t0 = now_ms()
     video_path = await record_navigation(request.steps)
+    duration_ms = now_ms() - t0
     if not video_path:
-        log_entry("record_failed", {"steps": request.steps, "error": "Video recording returned no file"})
+        log_entry("record_failed", {"steps": request.steps, "error": "Video recording returned no file"}, duration_ms=duration_ms)
         raise HTTPException(status_code=500, detail="Video recording failed")
     filename = os.path.basename(video_path)
     video_url = f"/videos/{filename}"
-    log_entry("record_success", {"steps": request.steps, "video_url": video_url})
+    log_entry("record_success", {"steps": request.steps, "video_url": video_url}, duration_ms=duration_ms)
     return RecordResponse(video_url=video_url)
 
 
@@ -140,7 +142,9 @@ async def query(request: QueryRequest) -> QueryResponse:
     if not request.question.strip():
         raise HTTPException(status_code=422, detail="Question must not be empty")
 
+    t0 = now_ms()
     result: dict[str, Any] = _query_chain.run(request.question)
+    duration_ms = now_ms() - t0
 
     log_entry("query", {
         "question": request.question,
@@ -152,7 +156,7 @@ async def query(request: QueryRequest) -> QueryResponse:
         "answer": result.get("answer", ""),
         "start_node_id": result.get("start_node_id", ""),
         "end_node_id": result.get("end_node_id", ""),
-    })
+    }, duration_ms=duration_ms)
 
     return QueryResponse(
         answer=result.get("answer", ""),

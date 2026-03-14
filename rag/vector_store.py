@@ -18,15 +18,23 @@ class VectorStore:
             name="manuals",
             metadata={"hnsw:space": "cosine"},
         )
+        # Primary splitter: split on markdown headers so each section stays together
+        self._header_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1200,
+            chunk_overlap=80,
+            separators=["\n## ", "\n### ", "\n\n", "\n", " "],
+            length_function=len,
+        )
+        # Fallback splitter for very long sections
         self._splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
+            chunk_size=600,
+            chunk_overlap=60,
             length_function=len,
         )
 
     def ingest_text(self, text: str, metadata: dict[str, Any]) -> None:
         """Split text into chunks and add them to the ChromaDB collection."""
-        chunks: list[str] = self._splitter.split_text(text)
+        chunks: list[str] = self._header_splitter.split_text(text)
         if not chunks:
             return
 
@@ -39,7 +47,7 @@ class VectorStore:
             {**metadata, "chunk_index": i} for i in range(len(chunks))
         ]
 
-        self._collection.add(
+        self._collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=chunks,

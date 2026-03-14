@@ -113,6 +113,16 @@ export default function Chat() {
           0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
           40% { transform: translateY(-6px); opacity: 1; }
         }
+        .md-content p { margin: 0 0 8px 0; }
+        .md-content p:last-child { margin-bottom: 0; }
+        .md-content a { color: #4a9eff; text-decoration: underline; }
+        .md-content ul, .md-content ol { margin: 6px 0 6px 20px; padding: 0; }
+        .md-content li { margin-bottom: 4px; }
+        .md-content code { background: #1a1f2e; border-radius: 3px; padding: 1px 5px; font-size: 14px; color: #f5c518; }
+        .md-content pre { background: #1a1f2e; border-radius: 5px; padding: 10px; overflow-x: auto; }
+        .md-content pre code { background: none; padding: 0; }
+        .md-content strong { color: #fff; }
+        .md-content h1, .md-content h2, .md-content h3 { margin: 10px 0 6px 0; color: #f5c518; }
       `}</style>
     </div>
   );

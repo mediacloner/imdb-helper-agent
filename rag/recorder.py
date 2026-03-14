@@ -22,17 +22,19 @@ _CURSOR_SCRIPT = """
 
     const RIPPLE_CSS =
         '@keyframes pw-ripple {' +
-        '  0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.7; }' +
-        '  100% { transform: translate(-50%,-50%) scale(1);  opacity: 0; }' +
+        '  0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.85; }' +
+        '  60%  { transform: translate(-50%,-50%) scale(1);  opacity: 0.5; }' +
+        '  100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; }' +
         '}' +
         '.pw-ripple {' +
         '  position: fixed;' +
-        '  width: 56px; height: 56px;' +
+        '  width: 72px; height: 72px;' +
         '  border-radius: 50%;' +
-        '  border: 2.5px solid rgba(80,160,255,0.85);' +
+        '  background: radial-gradient(circle, rgba(255,220,50,0.55) 0%, rgba(80,160,255,0.35) 60%, transparent 100%);' +
+        '  border: 3px solid rgba(255,220,50,0.9);' +
         '  pointer-events: none;' +
         '  z-index: 2147483646;' +
-        '  animation: pw-ripple 0.45s ease-out forwards;' +
+        '  animation: pw-ripple 0.55s ease-out forwards;' +
         '}';
 
     function spawnRipple(x, y) {
@@ -116,7 +118,7 @@ async def _human_move(page: Page, x: float, y: float) -> None:
         bx += random.uniform(-0.6, 0.6)
         by += random.uniform(-0.6, 0.6)
         await page.mouse.move(bx, by)
-        await asyncio.sleep(random.uniform(0.008, 0.018))
+        await asyncio.sleep(random.uniform(0.003, 0.007))
 
     # Store final position on window for next call
     await page.evaluate(f"() => {{ window._pwX = {x}; window._pwY = {y}; }}")

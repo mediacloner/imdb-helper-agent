@@ -37,6 +37,18 @@ Known movie IDs:
 - The Silence of the Lambs (1991): tt0102926 → https://www.imdb.com/title/tt0102926/
 - Schindler's List (1993): tt0108052 → https://www.imdb.com/title/tt0108052/
 
+## TV Show Pages
+URL pattern: https://www.imdb.com/title/<tt_id>/
+Known TV show IDs:
+- Seinfeld (1989–1998): tt0098904 → https://www.imdb.com/title/tt0098904/
+- Breaking Bad (2008–2013): tt0903747 → https://www.imdb.com/title/tt0903747/
+- Game of Thrones (2011–2019): tt0944947 → https://www.imdb.com/title/tt0944947/
+- Friends (1994–2004): tt0108778 → https://www.imdb.com/title/tt0108778/
+- The Sopranos (1999–2007): tt0141842 → https://www.imdb.com/title/tt0141842/
+- Stranger Things (2016–): tt4574334 → https://www.imdb.com/title/tt4574334/
+- The Office US (2005–2013): tt0386676 → https://www.imdb.com/title/tt0386676/
+- The Wire (2002–2008): tt0306414 → https://www.imdb.com/title/tt0306414/
+
 ## Full Cast & Crew Pages
 URL pattern: https://www.imdb.com/title/<tt_id>/fullcredits/
 Lists every actor, director, writer, and crew member with links to their person pages.
@@ -44,6 +56,9 @@ Direct examples:
 - The Matrix full cast: https://www.imdb.com/title/tt0133093/fullcredits/
 - Inception full cast: https://www.imdb.com/title/tt1375666/fullcredits/
 - The Dark Knight full cast: https://www.imdb.com/title/tt0468569/fullcredits/
+- Seinfeld full cast: https://www.imdb.com/title/tt0098904/fullcredits/
+- Breaking Bad full cast: https://www.imdb.com/title/tt0903747/fullcredits/
+- Friends full cast: https://www.imdb.com/title/tt0108778/fullcredits/
 
 ## Person Pages
 URL pattern: https://www.imdb.com/name/<nm_id>/
