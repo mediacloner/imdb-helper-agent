@@ -123,27 +123,31 @@ export async function extractState(page, nodeId) {
         if (seenSignatures.has(signature) && !el.id && !dataTestId) continue;
         seenSignatures.add(signature);
 
-        // Build unique CSS selector — priority: id > data-testid > nth-of-type fallback
+        // Build unique CSS selector — priority: id > data-testid > full positional path
         let cssSelector;
         if (el.id) {
           cssSelector = `#${el.id}`;
         } else if (dataTestId) {
           cssSelector = `[data-testid="${dataTestId}"]`;
         } else {
-          // Count siblings of same tag to build nth-of-type selector
-          const parent = el.parentElement;
+          // Walk up to nearest ancestor with an id or data-testid to anchor the selector
           const tag = el.tagName.toLowerCase();
-          if (parent) {
-            const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
-            const idx = siblings.indexOf(el) + 1;
-            const parentId = parent.id ? `#${parent.id} ` : '';
-            const firstClass = (typeof el.className === 'string' && el.className.trim())
-              ? `.${el.className.trim().split(/\s+/)[0]}`
-              : '';
-            cssSelector = `${parentId}${tag}${firstClass}:nth-of-type(${idx})`;
-          } else {
-            cssSelector = tag;
+          const firstClass = (typeof el.className === 'string' && el.className.trim())
+            ? `.${el.className.trim().split(/\s+/)[0]}`
+            : '';
+
+          let anchor = '';
+          let ancestor = el.parentElement;
+          while (ancestor) {
+            if (ancestor.id) { anchor = `#${ancestor.id} `; break; }
+            if (ancestor.getAttribute('data-testid')) { anchor = `[data-testid="${ancestor.getAttribute('data-testid')}"] `; break; }
+            ancestor = ancestor.parentElement;
           }
+
+          // nth-child within the whole document for uniqueness
+          const allSame = Array.from(document.querySelectorAll(tag + firstClass));
+          const idx = allSame.indexOf(el) + 1;
+          cssSelector = `${anchor}${tag}${firstClass}:nth-of-type(${idx})`;
         }
 
         results.push({ role, text, ariaLabel, cssSelector, dataTestId });

@@ -144,6 +144,8 @@ export async function crawl(startUrl, maxPages = 10) {
 
   // Track source+target pairs to avoid duplicate edges
   const edgeSignatures = new Set();
+  // Max outgoing edges per node — prevents list pages (full cast, charts) exploding the graph
+  const MAX_EDGES_PER_NODE = 30;
 
   let pageIndex = 0;
 
@@ -199,6 +201,8 @@ export async function crawl(startUrl, maxPages = 10) {
         console.warn(`[crawler] Link extraction failed for ${url}: ${linkErr.message}`);
       }
 
+      const nodeEdgeCount = edges.filter(e => e.source_node === nodeId).length;
+
       for (const link of links) {
         // Pre-assign node IDs for targets we haven't visited yet so edges are consistent
         if (!urlToNodeId.has(link)) {
@@ -213,6 +217,10 @@ export async function crawl(startUrl, maxPages = 10) {
         const edgeSig = `${nodeId}→${targetNodeId}`;
         if (edgeSignatures.has(edgeSig)) continue;
         edgeSignatures.add(edgeSig);
+
+        // Cap outgoing edges per node to keep graph manageable
+        const currentNodeEdges = edges.filter(e => e.source_node === nodeId).length;
+        if (currentNodeEdges >= MAX_EDGES_PER_NODE) continue;
 
         // Find the element_id of the matching anchor on the current node, if any
         const matchingElement = node.available_elements.find(
