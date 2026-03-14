@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(lscpu:*)",
-      "Bash(nvidia-smi:*)"
+      "Bash(nvidia-smi:*)",
+      "WebSearch",
+      "Read(//home/alex/.ssh/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(sudo apt:*)",
+      "Bash(snap install:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh auth:*)"
     ]
   }
 }
