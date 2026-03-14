@@ -32,7 +32,7 @@ elif [ "$choice" == "3" ]; then
 
 elif [ "$choice" == "4" ]; then
     echo "Importing graph into Neo4j..."
-    echo "Making sure Neo4j is running..."
+    echo "Starting Neo4j..."
     docker compose --profile production up -d neo4j
     echo "Waiting for Neo4j to be ready..."
     until docker compose exec neo4j cypher-shell -u neo4j -p password "RETURN 1;" > /dev/null 2>&1; do
@@ -40,11 +40,10 @@ elif [ "$choice" == "4" ]; then
         sleep 3
     done
     echo "Neo4j is ready."
-    echo "Running schema init..."
-    cd graph && npm install --silent && npm run init-schema
-    echo "Importing graph.json..."
-    npm run import
-    cd ..
+    echo "Running schema init + graph import..."
+    docker compose --profile import run --rm --build \
+        -e NEO4J_URI=bolt://neo4j:7687 \
+        graph-import sh -c "node scripts/initSchema.js && node scripts/importGraph.js"
     echo ""
     echo "Import complete."
     echo "Neo4j browser: http://localhost:7474"

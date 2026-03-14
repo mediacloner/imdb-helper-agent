@@ -35,6 +35,21 @@ services:
     profiles:
       - production
 
+  graph-import:
+    build:
+      context: ./graph
+    volumes:
+      - ./crawler/output:/crawler/output:ro
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+      - GRAPH_JSON_PATH=/crawler/output/graph.json
+    depends_on:
+      - neo4j
+    profiles:
+      - import
+
   neo4j:
     image: neo4j:5.26.0
     ports:
