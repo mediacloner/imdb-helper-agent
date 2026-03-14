@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any
 
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain.schema import HumanMessage, SystemMessage
 
 from graph_client import GraphClient
@@ -35,10 +35,11 @@ class QueryChain:
     def __init__(self, vector_store: VectorStore, graph_client: GraphClient) -> None:
         self._vector_store = vector_store
         self._graph_client = graph_client
-        self._llm = ChatOpenAI(
-            model="gpt-4o-mini",
+        self._llm = ChatOllama(
+            model=os.environ.get("OLLAMA_MODEL", "qwen3:8b"),
             temperature=0,
-            api_key=os.environ["OPENAI_API_KEY"],
+            base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434"),
+            format="json",
         )
 
     def run(self, question: str) -> dict[str, Any]:

@@ -4,14 +4,14 @@ from typing import Any
 import chromadb
 from chromadb import Collection
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
 
 class VectorStore:
     def __init__(self) -> None:
-        self._embedder = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            api_key=os.environ["OPENAI_API_KEY"],
+        self._embedder = OllamaEmbeddings(
+            model="nomic-embed-text",
+            base_url=os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434"),
         )
         self._client = chromadb.PersistentClient(path="./chroma_data")
         self._collection: Collection = self._client.get_or_create_collection(

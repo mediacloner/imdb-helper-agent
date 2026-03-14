@@ -17,9 +17,13 @@ elif [ "$choice" == "2" ]; then
     echo "Starting Production Profile..."
     docker compose --profile production up --build -d
     echo "Production services are spinning up in the background."
-    echo "Neo4j: http://localhost:7474"
-    echo "RAG API: http://localhost:8000"
+    echo "Pulling local models into Ollama (this may take a few minutes on first run)..."
+    docker compose exec ollama ollama pull qwen3:8b
+    docker compose exec ollama ollama pull nomic-embed-text
+    echo "Neo4j:     http://localhost:7474"
+    echo "RAG API:   http://localhost:8000"
     echo "Interface: http://localhost:3000"
+    echo "Ollama:    http://localhost:11434"
 else
     echo "Invalid choice. Exiting."
     exit 1
