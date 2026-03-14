@@ -142,7 +142,9 @@ export async function crawl(startUrl, maxPages = 10) {
       console.log(`[crawler] Visiting (${pageIndex + 1}/${maxPages}): ${url}`);
 
       try {
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // Give JS-heavy pages extra time to settle after initial load
+        await page.waitForTimeout(3000);
       } catch (navErr) {
         console.warn(`[crawler] Navigation failed for ${url}: ${navErr.message}`);
         continue;
