@@ -28,7 +28,14 @@ function generateReport(graph, startUrl, maxPages, durationMs) {
   lines.push(`**Total edges:** ${graph.edges.length}`);
 
   lines.push(`\n---\n`);
-  lines.push(`## Pages Scraped\n`);
+  lines.push(`## Pages Scraped (${graph.nodes.length})\n`);
+  for (let i = 0; i < graph.nodes.length; i++) {
+    const n = graph.nodes[i];
+    lines.push(`${i + 1}. [${n.description}](${n.url})`);
+  }
+
+  lines.push(`\n---\n`);
+  lines.push(`## Page Details\n`);
 
   for (const node of graph.nodes) {
     const caps = Object.keys(node.capabilities);
