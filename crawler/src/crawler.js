@@ -102,6 +102,22 @@ async function extractSameDomainLinks(page, baseDomain) {
  * @param {number} [maxPages=10] - Maximum number of pages to visit.
  * @returns {Promise<{ nodes: Object[], edges: Object[] }>}
  */
+// Key IMDB page types that users commonly ask about.
+// These are seeded directly so the graph covers important states
+// regardless of which links BFS happens to follow first.
+const IMDB_SEED_PAGES = [
+  'https://www.imdb.com',
+  'https://www.imdb.com/find/?q=inception&s=tt',          // search results
+  'https://www.imdb.com/title/tt1375666/',                 // movie page (Inception)
+  'https://www.imdb.com/title/tt1375666/fullcredits',      // full cast
+  'https://www.imdb.com/title/tt1375666/reviews',          // user reviews
+  'https://www.imdb.com/name/nm0634240/',                  // person page (Nolan)
+  'https://www.imdb.com/chart/top/',                       // top 250
+  'https://www.imdb.com/chart/moviemeter/',                // most popular
+  'https://www.imdb.com/watchlist',                        // watchlist
+  'https://www.imdb.com/news/movie/',                      // movie news
+];
+
 export async function crawl(startUrl, maxPages = 10) {
   const userAgent = getRandomUserAgent();
   const browser = await chromium.launch({ headless: true });
@@ -121,7 +137,13 @@ export async function crawl(startUrl, maxPages = 10) {
   const urlToNodeId = new Map();
 
   const visited = new Set();
-  const queue = [startUrl];
+  // Seed with important IMDB pages first, then fall back to BFS from startUrl
+  const seedSet = new Set(IMDB_SEED_PAGES.map(u => u.replace(/\/$/, '')));
+  const queue = [...IMDB_SEED_PAGES];
+  if (!seedSet.has(startUrl.replace(/\/$/, ''))) queue.push(startUrl);
+
+  // Track source+target pairs to avoid duplicate edges
+  const edgeSignatures = new Set();
 
   let pageIndex = 0;
 
@@ -186,6 +208,11 @@ export async function crawl(startUrl, maxPages = 10) {
         }
 
         const targetNodeId = urlToNodeId.get(link);
+
+        // Skip duplicate edges (same source → target)
+        const edgeSig = `${nodeId}→${targetNodeId}`;
+        if (edgeSignatures.has(edgeSig)) continue;
+        edgeSignatures.add(edgeSig);
 
         // Find the element_id of the matching anchor on the current node, if any
         const matchingElement = node.available_elements.find(
