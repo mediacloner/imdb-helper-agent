@@ -201,14 +201,17 @@ export async function crawl(startUrl, maxPages = 10) {
         console.warn(`[crawler] Link extraction failed for ${url}: ${linkErr.message}`);
       }
 
-      const nodeEdgeCount = edges.filter(e => e.source_node === nodeId).length;
-
       for (const link of links) {
         // Pre-assign node IDs for targets we haven't visited yet so edges are consistent
         if (!urlToNodeId.has(link)) {
           const targetSlug = urlToSlug(link);
           const targetIndex = visited.size + queue.indexOf(link);
           urlToNodeId.set(link, `state_${targetSlug}_${targetIndex}`);
+        }
+
+        // Always enqueue unvisited links for BFS regardless of edge cap
+        if (!visited.has(link) && !queue.includes(link) && pageIndex + queue.length < maxPages) {
+          queue.push(link);
         }
 
         const targetNodeId = urlToNodeId.get(link);
@@ -218,7 +221,7 @@ export async function crawl(startUrl, maxPages = 10) {
         if (edgeSignatures.has(edgeSig)) continue;
         edgeSignatures.add(edgeSig);
 
-        // Cap outgoing edges per node to keep graph manageable
+        // Cap outgoing edges per node to keep the graph manageable
         const currentNodeEdges = edges.filter(e => e.source_node === nodeId).length;
         if (currentNodeEdges >= MAX_EDGES_PER_NODE) continue;
 
@@ -235,10 +238,6 @@ export async function crawl(startUrl, maxPages = 10) {
           interaction_type: 'click',
           target_element_id: targetElementId,
         });
-
-        if (!visited.has(link) && !queue.includes(link) && pageIndex + queue.length < maxPages) {
-          queue.push(link);
-        }
       }
 
       pageIndex++;
