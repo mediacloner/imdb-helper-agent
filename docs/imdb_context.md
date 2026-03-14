@@ -36,6 +36,14 @@ Known movie IDs:
 - Fight Club (1999): tt0137523 → https://www.imdb.com/title/tt0137523/
 - The Silence of the Lambs (1991): tt0102926 → https://www.imdb.com/title/tt0102926/
 - Schindler's List (1993): tt0108052 → https://www.imdb.com/title/tt0108052/
+- The Terminator (1984): tt0088247 → https://www.imdb.com/title/tt0088247/
+- Terminator 2: Judgment Day (1991): tt0103064 → https://www.imdb.com/title/tt0103064/
+- Alien (1979): tt0078748 → https://www.imdb.com/title/tt0078748/
+- Aliens (1986): tt0090605 → https://www.imdb.com/title/tt0090605/
+- Jurassic Park (1993): tt0107290 → https://www.imdb.com/title/tt0107290/
+- Star Wars: A New Hope (1977): tt0076759 → https://www.imdb.com/title/tt0076759/
+- The Lion King (1994): tt0110357 → https://www.imdb.com/title/tt0110357/
+- Back to the Future (1985): tt0088763 → https://www.imdb.com/title/tt0088763/
 
 ## TV Show Pages
 URL pattern: https://www.imdb.com/title/<tt_id>/
@@ -79,9 +87,23 @@ Known people:
 - Most Popular Celebrities: https://www.imdb.com/chart/starmeter/
 
 ## Browse and Search
-- Browse by Genre: https://www.imdb.com/interest/all/
+- Browse by Genre/Interest: https://www.imdb.com/interest/all/
 - Advanced Title Search: https://www.imdb.com/search/title/
 - Advanced People Search: https://www.imdb.com/search/name/
+
+## Searching by Language / Country of Origin
+Use the Advanced Title Search with filter parameters:
+- Spanish-language movies (newest first): https://www.imdb.com/search/title/?languages=es&sort=year,desc
+- French-language movies: https://www.imdb.com/search/title/?languages=fr&sort=year,desc
+- Italian-language movies: https://www.imdb.com/search/title/?languages=it&sort=year,desc
+- German-language movies: https://www.imdb.com/search/title/?languages=de&sort=year,desc
+- Japanese-language movies: https://www.imdb.com/search/title/?languages=ja&sort=year,desc
+- Movies from Spain (country): https://www.imdb.com/search/title/?country_of_origin=es&sort=year,desc
+- Movies from France: https://www.imdb.com/search/title/?country_of_origin=fr&sort=year,desc
+Language codes follow ISO 639-1. Country codes follow ISO 3166-1 alpha-2.
+
+IMPORTANT: There is NO URL like imdb.com/movies or imdb.com/genre/<language>.
+Always use imdb.com/search/title/ with query parameters for language/country filtering.
 
 ## News and Events
 - Movie News: https://www.imdb.com/news/movie/

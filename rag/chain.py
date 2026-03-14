@@ -6,6 +6,19 @@ from graph_client import GraphClient
 from ollama_client import chat
 from vector_store import VectorStore
 
+# Title IDs verified to exist — any other tt-ID in a generated URL will be stripped
+# so the recorder clicks from search results instead of navigating to a wrong page
+_VERIFIED_TITLE_IDS = {
+    "tt0133093", "tt0234215", "tt0242653", "tt1375666", "tt0468569",
+    "tt0816692", "tt0068646", "tt0111161", "tt0110912", "tt0109830",
+    "tt4154796", "tt0499549", "tt0120338", "tt0099685", "tt0137523",
+    "tt0102926", "tt0108052", "tt0088247", "tt0103064", "tt0078748",
+    "tt0090605", "tt0107290", "tt0076759", "tt0110357", "tt0088763",
+    # TV shows
+    "tt0098904", "tt0903747", "tt0944947", "tt0108778", "tt0141842",
+    "tt4574334", "tt0386676", "tt0306414",
+}
+
 
 _INTENT_PROMPT = """You are an assistant that understands user intent on IMDb.
 Given a user question, extract:
@@ -47,18 +60,19 @@ Your response must be a JSON object with exactly two keys:
 - "steps": a JSON array of navigation steps the recorder will execute
 
 Rules for "answer":
-- Include real URLs from the context when available
-- When cast/actors are requested, ALWAYS include the direct fullcredits URL:
-  https://www.imdb.com/title/<tt_id>/fullcredits/ using the known IDs from context
+- ONLY use URLs and IMDb title IDs (ttXXXXXXX) that are EXPLICITLY listed in the IMDb context provided
+- NEVER guess or invent a title ID — if the exact ID is not in the context, say to search for it instead
+- For language/country searches, use: https://www.imdb.com/search/title/?languages=<code>&sort=year,desc
 - Be concise and action-oriented
 
 Rules for each step in "steps":
 - "description": short human label
-- "url": full URL to visit, or "" if not applicable
+- "url": ONLY use URLs explicitly listed in the IMDb context — leave "" if you are not certain
+- NEVER invent a title ID (ttXXXXXXX) — if the ID is not in the context, use a click step instead
+- When title ID is unknown: after a search step, add a click step with the movie/show title as target_element_id and "" as url, then navigate to fullcredits with "" url
 - "action": object with:
   - "interaction_type": one of "navigate", "search_query", "click", or null
-  - "target_element_id": for search_query put the SEARCH TERM (e.g. "The Matrix"),
-    for click put a visible label or CSS selector, otherwise null
+  - "target_element_id": for search_query put the SEARCH TERM, for click put visible label, otherwise null
 
 Example response:
 {
@@ -97,15 +111,29 @@ class QueryChain:
         if start_description and end_description:
             steps = self._graph_client.find_path(start_description, end_description)
 
-        # Detect graph miss
-        graph_miss = (
-            not steps
-            or (
-                len(steps) == 1
-                and "find" in steps[0].get("node_id", "").lower()
-                and steps[0].get("synthetic") is not True
-            )
+        # Detect graph miss: no steps, generic search fallback, or path doesn't relate to intent
+        graph_miss = not steps or (
+            len(steps) == 1
+            and "find" in steps[0].get("node_id", "").lower()
+            and steps[0].get("synthetic") is not True
         )
+
+        # Also a miss if the last step's description doesn't match the end intent at all
+        if not graph_miss and end_description and steps:
+            last_desc = steps[-1].get("description", "").lower()
+            intent_words = [w for w in end_description.lower().split() if len(w) > 3]
+            if intent_words and not any(w in last_desc for w in intent_words):
+                graph_miss = True
+
+        # Force miss for language/country/nationality queries — the graph has no such nodes
+        _LANGUAGE_KEYWORDS = {
+            "spanish", "french", "italian", "german", "japanese", "korean",
+            "chinese", "portuguese", "russian", "arabic", "hindi", "turkish",
+            "swedish", "danish", "norwegian", "polish", "dutch",
+            "mexico", "spain", "france", "italy", "germany", "brazil",
+        }
+        if not graph_miss and any(kw in question.lower() for kw in _LANGUAGE_KEYWORDS):
+            graph_miss = True
 
         # 3. Retrieve IMDb context chunks
         rag_chunks = self._vector_store.search(question, k=5)
@@ -170,13 +198,33 @@ class QueryChain:
         for i, item in enumerate(raw_steps):
             if not isinstance(item, dict):
                 continue
+            url = item.get("url", "") or ""
+            action = item.get("action") or {}
+            itype = action.get("interaction_type")
+            target = action.get("target_element_id") or ""
+            description = item.get("description", f"Step {i + 1}")
+
+            # Strip any title URL where the tt-ID is not in our verified list
+            tt_match = re.search(r"/title/(tt\d+)", url)
+            url_scrubbed = tt_match and tt_match.group(1) not in _VERIFIED_TITLE_IDS
+            if url_scrubbed:
+                url = ""
+                # Convert navigate→click so recorder finds the link by visible text
+                if itype == "navigate" and not target:
+                    itype = "click"
+                    # Use a cleaned-up version of the description as the click target
+                    target = re.sub(
+                        r"\s*(movie page|tv show page|title page|series page)\s*$",
+                        "", description, flags=re.IGNORECASE
+                    ).strip()
+
             steps.append({
                 "node_id": f"synthetic_{i}",
-                "url": item.get("url", ""),
-                "description": item.get("description", f"Step {i + 1}"),
+                "url": url,
+                "description": description,
                 "action": {
-                    "interaction_type": (item.get("action") or {}).get("interaction_type"),
-                    "target_element_id": (item.get("action") or {}).get("target_element_id"),
+                    "interaction_type": itype,
+                    "target_element_id": target or None,
                 },
                 "synthetic": True,
             })

@@ -296,19 +296,31 @@ async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
                         await _goto(page, url)
 
                 elif interaction == "click" and target and not target.startswith("state_"):
-                    try:
-                        locator = page.locator(target).first
-                        if await locator.is_visible(timeout=2000):
-                            await _move_and_click(page, locator, pause_ms=500)
-                            await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                            await page.wait_for_timeout(2500)
+                    clicked = False
+                    # Build list of locator strategies: text match first, then CSS
+                    is_css = target.startswith(("#", ".", "[", ">")) or " " not in target.strip()
+                    locator_attempts = []
+                    if not is_css:
+                        locator_attempts += [
+                            page.get_by_text(target, exact=False).first,
+                            page.locator(f"a:has-text('{target}')").first,
+                        ]
+                    locator_attempts.append(page.locator(target).first)
+                    for locator in locator_attempts:
+                        try:
+                            if await locator.is_visible(timeout=2000):
+                                await _move_and_click(page, locator, pause_ms=500)
+                                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                                await page.wait_for_timeout(2500)
+                                clicked = True
+                                break
+                        except Exception:
                             continue
-                    except Exception:
-                        pass
-                    if url:
-                        navigated = await _navigate_via_menu(page, url)
-                        if not navigated:
-                            await _goto(page, url)
+                    if not clicked:
+                        if url:
+                            navigated = await _navigate_via_menu(page, url)
+                            if not navigated:
+                                await _goto(page, url)
 
                 elif url:
                     navigated = await _navigate_via_menu(page, url)
