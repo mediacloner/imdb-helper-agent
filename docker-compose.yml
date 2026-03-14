@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # SCRAPE PROFILE
+  # ==========================================
+  crawler:
+    build:
+      context: ./crawler
+    volumes:
+      - ./crawler:/app
+    profiles:
+      - scrape
+    environment:
+      - NODE_ENV=development
+
+  # ==========================================
+  # PRODUCTION PROFILE
+  # ==========================================
+  neo4j:
+    image: neo4j:5.26.0
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    profiles:
+      - production
+
+  rag:
+    build:
+      context: ./rag
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./rag:/app
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+    depends_on:
+      - neo4j
+    profiles:
+      - production
+
+  interface:
+    build:
+      context: ./interface
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./interface:/app
+    depends_on:
+      - rag
+    profiles:
+      - production

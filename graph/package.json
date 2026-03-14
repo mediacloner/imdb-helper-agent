@@ -1,0 +1,12 @@
+{
+  "name": "graph",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "init-schema": "node scripts/initSchema.js",
+    "import": "node scripts/importGraph.js"
+  },
+  "dependencies": {
+    "neo4j-driver": "^5.20.0"
+  }
+}
