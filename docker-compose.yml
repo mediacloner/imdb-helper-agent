@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ==========================================
   # SCRAPE PROFILE
@@ -17,23 +15,18 @@ services:
       - MAX_PAGES=${MAX_PAGES:-10}
 
   # ==========================================
-  # PRODUCTION PROFILE
+  # IMPORT PROFILE
   # ==========================================
-  ollama:
-    image: ollama/ollama:latest
+  neo4j:
+    image: neo4j:5.26.0
     ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
     profiles:
       - production
+      - import
 
   graph-import:
     build:
@@ -50,13 +43,22 @@ services:
     profiles:
       - import
 
-  neo4j:
-    image: neo4j:5.26.0
+  # ==========================================
+  # PRODUCTION PROFILE
+  # ==========================================
+  ollama:
+    image: ollama/ollama:latest
     ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
-    environment:
-      - NEO4J_AUTH=neo4j/password
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     profiles:
       - production
 
