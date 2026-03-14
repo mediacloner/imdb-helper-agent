@@ -50,11 +50,20 @@ function inferCapabilities(elements) {
   if (allText.includes('sign in') || allText.includes('log in'))
     caps.can_sign_in = true;
 
-  if (allText.includes('filter') || allText.includes('sort by') || allText.includes('genre'))
+  if (allText.includes('filter') || allText.includes('genre'))
     caps.can_filter = true;
+
+  if (allText.includes('sort') || allText.includes('ascending') || allText.includes('descending') || allText.includes('sort order'))
+    caps.can_sort = true;
+
+  if (allText.includes('detailed view') || allText.includes('grid view') || allText.includes('compact view'))
+    caps.can_change_view = true;
 
   if (allText.includes('rate') || allText.includes('your rating') || allText.includes('star'))
     caps.can_rate = true;
+
+  if (allText.includes('mark as watched') || allText.includes('watched'))
+    caps.can_mark_watched = true;
 
   if (allText.includes('review') || allText.includes('write review') || allText.includes('user review'))
     caps.can_review = true;
@@ -62,17 +71,44 @@ function inferCapabilities(elements) {
   if (allText.includes('full cast') || allText.includes('cast & crew'))
     caps.can_view_full_cast = true;
 
-  if (allText.includes('trailer') || allText.includes('watch trailer') || allText.includes('video'))
+  if (allText.includes('trailer') || allText.includes('watch trailer') || allText.includes('play trailer'))
     caps.can_watch_trailer = true;
+
+  if (allText.includes('browse trailers') || allText.includes('browse trailer'))
+    caps.can_browse_trailers = true;
 
   if (allText.includes('episode') || allText.includes('season'))
     caps.can_browse_episodes = true;
 
-  if (allText.includes('share') || allText.includes('copy link'))
+  if (allText.includes('share') || allText.includes('copy link') || allText.includes('share on social'))
     caps.can_share = true;
 
   if (allText.includes('trivia') || allText.includes('goofs') || allText.includes('quotes'))
     caps.can_view_trivia = true;
+
+  if (allText.includes('photo') || allText.includes('gallery') || allText.includes('poster') || allText.includes('image'))
+    caps.can_view_photos = true;
+
+  if (allText.includes('award') || allText.includes('oscar') || allText.includes('won') || allText.includes('nominated'))
+    caps.can_view_awards = true;
+
+  if (allText.includes('metascore') || allText.includes('critic review') || allText.includes('/10') || allText.includes('rating'))
+    caps.can_view_rating_details = true;
+
+  if (allText.includes('add to list') || allText.includes('add name to') || allText.includes('another list'))
+    caps.can_add_to_list = true;
+
+  if (allText.includes('favorite') || allText.includes('favourite'))
+    caps.can_add_to_favorites = true;
+
+  if (allText.includes('agent info') || allText.includes('resume') || allText.includes('imdbpro'))
+    caps.can_view_pro_info = true;
+
+  if (allText.includes('poll') || allText.includes('vote'))
+    caps.can_vote_poll = true;
+
+  if (allText.includes('create account') || allText.includes('create an account') || allText.includes('register'))
+    caps.can_create_account = true;
 
   if (elements.some(e => e.role === 'input' && (e.ariaLabel || '').toLowerCase().includes('location')))
     caps.can_search_showtimes = true;
