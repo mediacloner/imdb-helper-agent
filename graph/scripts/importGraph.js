@@ -73,8 +73,8 @@ async function importEdges(session) {
 
   for (const batch of batches) {
     const params = batch.map((edge) => ({
-      source_id: edge.source,
-      target_id: edge.target,
+      source_id: edge.source_node,
+      target_id: edge.target_node,
       edge_id: edge.edge_id,
       interaction_type: edge.interaction_type ?? null,
       target_element_id: edge.target_element_id ?? null,
