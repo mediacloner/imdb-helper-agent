@@ -6,10 +6,13 @@ from typing import Any, AsyncGenerator, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from chain import QueryChain
 from graph_client import GraphClient
+from recorder import record_navigation
+from request_logger import log_entry
 from vector_store import VectorStore
 
 load_dotenv()
@@ -31,6 +34,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _graph_client = GraphClient()
     _query_chain = QueryChain(_vector_store, _graph_client)
 
+    # Auto-ingest the IMDb context document so the LLM always has site knowledge
+    context_path = "/docs/imdb_context.md"
+    if os.path.exists(context_path):
+        try:
+            _vector_store.ingest_file(context_path, "imdb_context.md")
+        except Exception as e:
+            print(f"Warning: could not ingest IMDb context: {e}")
+
     yield
 
     if _graph_client is not None:
@@ -41,12 +52,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # App setup
 # ---------------------------------------------------------------------------
 
+os.makedirs("/app/videos", exist_ok=True)
+
 app = FastAPI(
     title="IMDB Helper RAG Service",
     description="RAG + LLM Brain service for the IMDB Helper project.",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.mount("/videos", StaticFiles(directory="/app/videos"), name="videos")
 
 app.add_middleware(
     CORSMiddleware,
@@ -83,9 +98,32 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class RecordRequest(BaseModel):
+    steps: list[dict[str, Any]]
+
+
+class RecordResponse(BaseModel):
+    video_url: str
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@app.post("/record", response_model=RecordResponse)
+async def record(request: RecordRequest) -> RecordResponse:
+    """Record a Playwright video navigating through the given steps."""
+    if not request.steps:
+        raise HTTPException(status_code=422, detail="No steps provided")
+    video_path = await record_navigation(request.steps)
+    if not video_path:
+        log_entry("record_failed", {"steps": request.steps, "error": "Video recording returned no file"})
+        raise HTTPException(status_code=500, detail="Video recording failed")
+    filename = os.path.basename(video_path)
+    video_url = f"/videos/{filename}"
+    log_entry("record_success", {"steps": request.steps, "video_url": video_url})
+    return RecordResponse(video_url=video_url)
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
@@ -103,6 +141,18 @@ async def query(request: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=422, detail="Question must not be empty")
 
     result: dict[str, Any] = _query_chain.run(request.question)
+
+    log_entry("query", {
+        "question": request.question,
+        "llm_intent": result.get("intent", {}),
+        "graph_miss": result.get("graph_miss", False),
+        "synthetic_steps": result.get("synthetic_steps", False),
+        "steps_count": len(result.get("steps", [])),
+        "steps": result.get("steps", []),
+        "answer": result.get("answer", ""),
+        "start_node_id": result.get("start_node_id", ""),
+        "end_node_id": result.get("end_node_id", ""),
+    })
 
     return QueryResponse(
         answer=result.get("answer", ""),

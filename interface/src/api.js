@@ -1,9 +1,7 @@
 export async function sendQuery(question) {
   const response = await fetch('/api/query', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question }),
   });
 
@@ -12,6 +10,18 @@ export async function sendQuery(question) {
   }
 
   return response.json();
+}
+
+export async function recordSteps(steps) {
+  const response = await fetch('/api/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ steps }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.video_url ?? null;
 }
 
 export async function ingestFile(file) {

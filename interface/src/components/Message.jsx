@@ -2,7 +2,7 @@ import React from 'react';
 import StepList from './StepList.jsx';
 
 export default function Message({ message }) {
-  const { role, content, steps, videoUrl } = message;
+  const { role, content, steps, videoUrl, recordingVideo } = message;
   const isAssistant = role === 'assistant';
 
   return (
@@ -20,14 +20,21 @@ export default function Message({ message }) {
           <StepList steps={steps} />
         )}
 
+        {isAssistant && recordingVideo && (
+          <div style={styles.videoContainer}>
+            <p style={styles.videoLabel}>⏺ Recording tutorial video...</p>
+          </div>
+        )}
+
         {isAssistant && videoUrl && (
           <div style={styles.videoContainer}>
             <p style={styles.videoLabel}>Tutorial Video</p>
             <video
               src={videoUrl}
               controls
+              autoPlay
               style={styles.video}
-              preload="metadata"
+              preload="auto"
             >
               Your browser does not support the video element.
             </video>
@@ -92,7 +99,7 @@ const styles = {
   },
   content: {
     margin: '0',
-    fontSize: '15px',
+    fontSize: '17px',
     color: '#e0e4f0',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',

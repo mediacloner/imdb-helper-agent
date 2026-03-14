@@ -10,11 +10,11 @@ export default defineConfig({
       '/api': {
         target: 'http://rag:8000',
         changeOrigin: true,
-        configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
-            options.target = 'http://localhost:8000';
-          });
-        },
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/videos': {
+        target: 'http://rag:8000',
+        changeOrigin: true,
       },
     },
   },

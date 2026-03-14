@@ -24,6 +24,8 @@ services:
       - "7687:7687" # Bolt
     environment:
       - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
     profiles:
       - production
       - import
@@ -46,22 +48,6 @@ services:
   # ==========================================
   # PRODUCTION PROFILE
   # ==========================================
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    profiles:
-      - production
-
   rag:
     build:
       context: ./rag
@@ -69,15 +55,17 @@ services:
       - "8000:8000"
     volumes:
       - ./rag:/app
+      - ./docs:/docs:ro
     environment:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=password
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=qwen3:8b
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - neo4j
-      - ollama
     profiles:
       - production
 
@@ -88,10 +76,11 @@ services:
       - "3000:3000"
     volumes:
       - ./interface:/app
+      - /app/node_modules
     depends_on:
       - rag
     profiles:
       - production
 
 volumes:
-  ollama_data:
+  neo4j_data:

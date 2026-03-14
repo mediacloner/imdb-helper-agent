@@ -10,8 +10,10 @@ export default function StepList({ steps }) {
         {steps.map((step, index) => {
           const stepNumber = step.step_number ?? index + 1;
           const description = step.node_description ?? step.description ?? '';
-          const interactionType = step.interaction_type ?? step.action ?? '';
-          const targetElement = step.target_element ?? step.target ?? '';
+          const interactionType = step.interaction_type ?? step.action?.interaction_type ?? '';
+          const rawTarget = step.target_element ?? step.action?.target_element_id ?? step.target ?? '';
+          // Hide internal graph IDs (contain __ or start with state_)
+          const targetElement = (rawTarget.includes('__') || rawTarget.startsWith('state_')) ? '' : rawTarget;
 
           return (
             <li key={index} style={styles.item}>

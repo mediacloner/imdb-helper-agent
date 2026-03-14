@@ -1,6 +1,5 @@
 import React from 'react';
 import Chat from './components/Chat.jsx';
-import FileUpload from './components/FileUpload.jsx';
 
 export default function App() {
   return (
@@ -16,7 +15,6 @@ export default function App() {
       </header>
 
       <main style={styles.main}>
-        <FileUpload />
         <Chat />
       </main>
     </div>

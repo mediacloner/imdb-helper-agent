@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Message from './Message.jsx';
-import { sendQuery } from '../api.js';
+import { sendQuery, recordSteps } from '../api.js';
 
 export default function Chat() {
   const [messages, setMessages] = useState([
@@ -32,13 +32,24 @@ export default function Chat() {
 
     try {
       const data = await sendQuery(question);
+      const steps = data.steps ?? [];
       const assistantMessage = {
         role: 'assistant',
         content: data.answer ?? data.response ?? data.text ?? JSON.stringify(data),
-        steps: data.steps ?? [],
-        videoUrl: data.video_url ?? data.videoUrl ?? null,
+        steps,
+        videoUrl: null,
+        recordingVideo: steps.length > 0,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      if (steps.length > 0) {
+        const videoUrl = await recordSteps(steps);
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, videoUrl, recordingVideo: false } : m
+          )
+        );
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -176,7 +187,7 @@ const styles = {
     border: '1px solid #2a3040',
     backgroundColor: '#1a1f2e',
     color: '#e0e4f0',
-    fontSize: '15px',
+    fontSize: '17px',
     outline: 'none',
     transition: 'border-color 0.15s',
   },
@@ -186,7 +197,7 @@ const styles = {
     border: 'none',
     backgroundColor: '#f5c518',
     color: '#0d0d0d',
-    fontSize: '15px',
+    fontSize: '17px',
     fontWeight: '700',
     cursor: 'pointer',
     transition: 'background-color 0.15s',
