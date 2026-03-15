@@ -69,18 +69,18 @@ Rules for "answer":
 - NEVER guess or invent a title ID — describe the navigation instead
 - For language/country searches, use: https://www.imdb.com/search/title/?languages=<code>&sort=year,desc
 
-Rules for each step in "steps":
-- "description": short human label
-- "url": ONLY use URLs explicitly listed in the IMDb context — leave "" if you are not certain
-- NEVER invent a title ID (ttXXXXXXX) — if the ID is not in the context, use a click step instead
-- When title ID is unknown: after a search step, add a click step with the movie/show title as target_element_id and "" as url, then navigate to fullcredits with "" url
-- "action": object with:
-  - "interaction_type": one of "navigate", "search_query", "click", or null
-  - "target_element_id": for search_query put the SEARCH TERM, for click put visible label, otherwise null
+Rules for "steps":
+- The steps array MUST have exactly one entry per numbered step in "answer" — they must match 1-to-1
+- "description": short label matching that answer step
+- "url": ONLY use URLs from the IMDb context — leave "" if unknown
+- NEVER invent a title ID (ttXXXXXXX) not in the context — use a click step with "" url instead
+- "action":
+  - "interaction_type": "search_query" when the step is a search, "click" when clicking a button/link, "navigate" when going to a direct URL
+  - "target_element_id": for search_query put the SEARCH TERM, for click put the visible label text, for navigate use null
 
-Example response:
+Example — answer has 3 steps, steps array has exactly 3 entries:
 {
-  "answer": "1. Search for 'The Matrix'\\n2. Click the movie result\\n3. Open Full Cast at https://www.imdb.com/title/tt0133093/fullcredits/",
+  "answer": "1. Search for 'The Matrix' in the search bar\\n2. Click the movie result to open its page\\n3. Click 'Full cast & crew' to see all actors (https://www.imdb.com/title/tt0133093/fullcredits/)",
   "steps": [
     {"description": "Search for The Matrix", "url": "https://www.imdb.com/find/?q=The+Matrix&s=tt", "action": {"interaction_type": "search_query", "target_element_id": "The Matrix"}},
     {"description": "The Matrix movie page", "url": "https://www.imdb.com/title/tt0133093/", "action": {"interaction_type": "navigate", "target_element_id": null}},
