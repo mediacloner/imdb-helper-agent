@@ -252,48 +252,33 @@ async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
     video_dir = f"/tmp/pw_video_{video_id}"
     os.makedirs(video_dir, exist_ok=True)
 
-    _BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
-    _CONTEXT_OPTS = dict(
-        viewport={"width": 1280, "height": 720},
-        user_agent=(
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        locale="en-US",
-        extra_http_headers={
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-    )
-
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(args=_BROWSER_ARGS)
-
-            # ── Phase 1: dismiss cookies WITHOUT recording ──────────────────
-            prep_ctx: BrowserContext = await browser.new_context(**_CONTEXT_OPTS)
-            prep_page = await prep_ctx.new_page()
-            await _goto(prep_page, HOME_URL)
-            await _dismiss_cookies(prep_page)
-            await prep_page.wait_for_timeout(800)
-            # Harvest cookies so the recording context starts with them
-            cookies = await prep_ctx.cookies()
-            await prep_ctx.close()
-
-            # ── Phase 2: recording context starts AFTER cookie banner ───────
+            browser = await p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
             context: BrowserContext = await browser.new_context(
-                **_CONTEXT_OPTS,
                 record_video_dir=video_dir,
                 record_video_size={"width": 1280, "height": 720},
+                viewport={"width": 1280, "height": 720},
+                user_agent=(
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
             )
-            await context.add_cookies(cookies)
+
             await context.add_init_script(_CURSOR_SCRIPT)
             page = await context.new_page()
 
-            # Start cleanly at home (no cookie banner)
+            # Start at home, move cursor to center, then dismiss cookies
             await _goto(page, HOME_URL)
             await _human_move(page, 640, 360)
-            await page.wait_for_timeout(800)
+            await page.wait_for_timeout(600)
+            await _dismiss_cookies(page)
+            await page.wait_for_timeout(1200)
 
             # Navigate each step, dispatching on interaction_type
             for step in steps:
