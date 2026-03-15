@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+interface/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Vector store & logs (runtime data)
+rag/chroma_data/
+rag/logs/
+rag/videos/
+
+# Crawler output (large generated files)
+crawler/output/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

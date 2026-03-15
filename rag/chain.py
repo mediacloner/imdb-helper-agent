@@ -62,10 +62,12 @@ Your response must be a JSON object with exactly two keys:
 - "steps": a JSON array of navigation steps the recorder will execute
 
 Rules for "answer":
+- ALWAYS describe the navigation as a sequence of human actions (click, search, scroll) — not just a URL
+- Each step should describe what the user sees and does: e.g. "Search for 'Frasier' in the search bar", "Click the TV series result", "Click the 'Episodes' tab", "Select Season 1 from the dropdown"
+- You MAY include a direct URL at the end of the relevant step as a shortcut reference, but it must NOT replace the human description
 - ONLY use URLs and IMDb title IDs (ttXXXXXXX) that are EXPLICITLY listed in the IMDb context provided
-- NEVER guess or invent a title ID — if the exact ID is not in the context, say to search for it instead
+- NEVER guess or invent a title ID — describe the navigation instead
 - For language/country searches, use: https://www.imdb.com/search/title/?languages=<code>&sort=year,desc
-- Be concise and action-oriented
 
 Rules for each step in "steps":
 - "description": short human label
