@@ -56,6 +56,25 @@ Known TV show IDs:
 - Stranger Things (2016–): tt4574334 → https://www.imdb.com/title/tt4574334/
 - The Office US (2005–2013): tt0386676 → https://www.imdb.com/title/tt0386676/
 - The Wire (2002–2008): tt0306414 → https://www.imdb.com/title/tt0306414/
+- Frasier (1993–2004): tt0106004 → https://www.imdb.com/title/tt0106004/
+- The Simpsons (1989–): tt0096697 → https://www.imdb.com/title/tt0096697/
+- The X-Files (1993–2018): tt0106179 → https://www.imdb.com/title/tt0106179/
+- Lost (2004–2010): tt0411008 → https://www.imdb.com/title/tt0411008/
+- House M.D. (2004–2012): tt0412142 → https://www.imdb.com/title/tt0412142/
+- The Crown (2016–): tt4786824 → https://www.imdb.com/title/tt4786824/
+- Succession (2018–2023): tt7660850 → https://www.imdb.com/title/tt7660850/
+
+## TV Show Episodes Pages
+URL pattern: https://www.imdb.com/title/<tt_id>/episodes/?season=<N>
+Each season has its own episodes listing. Season numbers start at 1.
+Direct examples:
+- Frasier Season 1: https://www.imdb.com/title/tt0106004/episodes/?season=1
+- Frasier Season 2: https://www.imdb.com/title/tt0106004/episodes/?season=2
+- Breaking Bad Season 1: https://www.imdb.com/title/tt0903747/episodes/?season=1
+- Seinfeld Season 1: https://www.imdb.com/title/tt0098904/episodes/?season=1
+- Friends Season 1: https://www.imdb.com/title/tt0108778/episodes/?season=1
+- Game of Thrones Season 1: https://www.imdb.com/title/tt0944947/episodes/?season=1
+- The Simpsons Season 1: https://www.imdb.com/title/tt0096697/episodes/?season=1
 
 ## Full Cast & Crew Pages
 URL pattern: https://www.imdb.com/title/<tt_id>/fullcredits/
@@ -127,6 +146,12 @@ Clicking the "Menu" button (hamburger, top-left) opens a sidebar with:
 - News → Movie, TV, Celebrity news
 
 ## Common Navigation Flows
+
+### How to view episodes of a TV show season
+1. Search for the show title in the search bar
+2. Click the TV series entry in search results
+3. Navigate directly to the episodes page: https://www.imdb.com/title/<tt_id>/episodes/?season=<N>
+Example for Frasier Season 1: https://www.imdb.com/title/tt0106004/episodes/?season=1
 
 ### How to find actors of a specific movie
 1. Search for the movie title in the search bar
