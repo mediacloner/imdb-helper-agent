@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IMDB Helper — Test Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="runs_data.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c14;--surface:#131620;--surface2:#1a1e2e;--border:#2a2e42;
+  --yellow:#f5c518;--yellow2:#d4a800;--text:#e0e4f0;--muted:#8890a8;
+  --red:#e05252;--green:#52c07a;--blue:#5298e0;--purple:#9a7fd4;--orange:#e09a52;
+  --radius:10px;--shadow:0 4px 24px rgba(0,0,0,.55);
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:16px;line-height:1.5;display:flex;flex-direction:column;min-height:100vh}
+.hbtn{background:transparent;border:1px solid var(--border);border-radius:7px;padding:7px 10px;cursor:pointer;display:flex;flex-direction:column;gap:5px;align-items:center}
+.hbar{display:block;width:22px;height:2px;background:var(--text);border-radius:2px}
+.hmenu{position:absolute;top:calc(100% + 8px);right:0;width:240px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:1000;overflow:hidden}
+.hmenu-title{padding:10px 16px;font-size:12px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border)}
+.hmenu-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;text-decoration:none;color:var(--text);font-size:15px;border-bottom:1px solid var(--surface2)}
+.hmenu-item:hover{background:var(--surface2)}
+a{color:var(--yellow)}
+button{cursor:pointer}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Header ── */
+header{background:#000;border-bottom:2px solid var(--yellow);padding:0 20px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:10;position:relative}
+.logo{font-size:22px;font-weight:900;background:var(--yellow);color:#000;padding:2px 10px;border-radius:4px}
+header h1{font-size:18px;font-weight:600;color:var(--text)}
+#run-meta{color:var(--muted);font-size:14px;text-align:right;line-height:1.3}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px;position:relative}
+
+/* ── Pills ── */
+.pill{font-size:13px;padding:2px 8px;border-radius:8px;font-weight:600}
+.pill-score{background:#1a2e1a;color:var(--green)}
+.pill-score.mid{background:#2e2010;color:var(--orange)}
+.pill-score.bad{background:#2e1010;color:var(--red)}
+.pill-pass{background:#1a2e1a;color:var(--green)}
+.pill-graph{background:#1a1e2e;color:var(--blue)}
+.pill-err{background:#2e1a1a;color:var(--red)}
+
+/* ── Main content ── */
+main{flex:1;padding:24px;max-width:1200px;margin:0 auto;width:100%}
+.page-wrap{display:flex;flex-direction:column;flex:1}
+
+/* ── Welcome screen ── */
+#welcome{text-align:center;padding:60px 20px;color:var(--muted)}
+#welcome .wl-logo{font-size:56px;margin-bottom:16px}
+#welcome h2{font-size:26px;color:var(--text);margin-bottom:8px}
+#welcome p{font-size:16px;max-width:420px;margin:0 auto 12px}
+#welcome code{background:var(--surface2);padding:2px 8px;border-radius:4px;color:var(--yellow);font-size:15px}
+
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:22px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.kpi .label{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.6px}
+.kpi .value{font-size:32px;font-weight:800;color:var(--yellow);line-height:1.1}
+.kpi .sub{font-size:13px;color:var(--muted)}
+.kpi.good .value{color:var(--green)}
+.kpi.bad  .value{color:var(--red)}
+.kpi.blue .value{color:var(--blue)}
+
+/* ── Section title ── */
+.section-title{font-size:16px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+
+/* ── Cards / charts ── */
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.chart-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:900px){.chart-row,.chart-row-3{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.card h3{font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.chart-wrap{position:relative;height:240px}
+
+/* ── Dim bars ── */
+.dim-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.dim-label{width:145px;font-size:14px;color:var(--muted);text-align:right;flex-shrink:0}
+.dim-track{flex:1;height:14px;background:var(--surface2);border-radius:7px;overflow:hidden}
+.dim-fill{height:100%;border-radius:7px;transition:width .4s}
+.dim-score{width:36px;font-size:15px;font-weight:700;text-align:right}
+
+/* ── Category table ── */
+.cat-table{width:100%;border-collapse:collapse;font-size:15px}
+.cat-table th{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:600;font-size:13px}
+.cat-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.cat-table tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:13px;font-weight:700;text-transform:uppercase}
+.badge-pass{background:#0f2e1a;color:var(--green)}
+.badge-fail{background:#2e0f0f;color:var(--red)}
+.badge-basic{background:#1a3040;color:#5ab4e0}
+.badge-intermediate{background:#1e3020;color:#5ac070}
+.badge-advanced{background:#3a2a10;color:#e0a050}
+.badge-expert{background:#3a1020;color:#e05080}
+
+/* ── Failures ── */
+.failure-list{display:flex;flex-direction:column;gap:10px}
+.failure-item{background:var(--surface2);border-left:3px solid var(--red);border-radius:6px;padding:12px 16px;cursor:pointer}
+.failure-item:hover{background:#1e2035}
+.fi-header{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.fi-id{font-size:13px;color:var(--muted)}
+.fi-score{font-size:20px;font-weight:800;color:var(--red)}
+.fi-q{font-size:15px;font-weight:600;flex:1}
+.fi-reasoning{font-size:14px;color:var(--muted);margin-top:5px}
+.fi-weaknesses{font-size:13px;color:var(--orange);margin-top:3px}
+
+/* ── Results table ── */
+.table-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.table-controls input[type=text]{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 12px;font-size:15px;width:260px}
+select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:14px}
+.results-table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+table.rt{width:100%;border-collapse:collapse;font-size:14px}
+table.rt thead{background:var(--surface2)}
+table.rt th{padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:13px;white-space:nowrap;cursor:pointer;border-bottom:1px solid var(--border)}
+table.rt th:hover,table.rt th.sorted{color:var(--yellow)}
+table.rt td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+table.rt tr:last-child td{border-bottom:none}
+table.rt tr:hover td{background:rgba(255,255,255,.02)}
+.score-num{font-weight:800;font-size:18px}
+.sg{color:var(--green)}.sm{color:var(--orange)}.sb{color:var(--red)}.sn{color:var(--muted)}
+.graph-badge{font-size:11px;font-weight:700;padding:1px 5px;border-radius:8px}
+.graph-hit{background:#0f2e1a;color:var(--green)}
+.graph-miss{background:#2e1a0f;color:var(--orange)}
+.q-text{max-width:300px}
+.ans-preview{max-width:220px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+/* ── Detail row ── */
+.detail-row{display:none}
+.detail-row.open{display:table-row}
+.detail-cell{padding:0!important}
+.detail-inner{padding:16px 20px;background:var(--surface2);border-top:1px solid var(--border)}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:800px){.detail-grid{grid-template-columns:1fr}}
+.detail-block{margin-bottom:14px}
+.detail-block h4{font-size:13px;color:var(--yellow);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px}
+.detail-block p,.detail-block li{font-size:14px;color:var(--muted)}
+.steps-list{list-style:none;padding:0}
+.steps-list li{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)}
+.steps-list li:last-child{border-bottom:none}
+.step-num{background:var(--surface);border:1px solid var(--border);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--yellow);flex-shrink:0}
+.step-info{flex:1}
+.step-desc{font-size:14px;color:var(--text)}
+.step-meta{font-size:13px;color:var(--muted)}
+.step-url{font-size:12px;color:var(--blue);word-break:break-all}
+.ib{font-size:12px;padding:2px 6px;border-radius:7px;font-weight:700;text-transform:uppercase}
+.ib-search_query{background:#1a2e40;color:var(--blue)}
+.ib-click{background:#1a2a10;color:var(--green)}
+.ib-navigate{background:#2a1a30;color:var(--purple)}
+.judge-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.jsi{background:var(--surface);border-radius:5px;padding:7px 10px}
+.jsi .jl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.jsi .jv{font-size:20px;font-weight:800}
+.answer-box{background:var(--surface);border-radius:5px;padding:12px;font-size:14px;color:var(--text);white-space:pre-wrap;max-height:180px;overflow-y:auto;border:1px solid var(--border)}
+
+/* ── Playback table ── */
+.playback-table{width:100%;border-collapse:collapse;font-size:12px}
+.playback-table th{color:var(--muted);padding:3px 6px;text-align:left;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase}
+.playback-table td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+.playback-table tr:last-child td{border-bottom:none}
+.playback-table code{font-family:monospace;font-size:11px;color:var(--muted);word-break:break-all}
+
+/* ── Btn ── */
+.btn{background:var(--yellow);color:#000;border:none;border-radius:5px;padding:6px 14px;font-weight:700;font-size:14px}
+.btn:hover{background:var(--yellow2)}
+.btn-sm{padding:4px 10px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo" onclick="showHome()" style="cursor:pointer" title="Back to home">IMDb</div>
+  <h1>Test Quality Dashboard</h1>
+  <div class="header-right">
+    <div id="run-meta"></div>
+    <button class="hbtn" onclick="toggleHMenu()" title="Menu" aria-label="Menu">
+      <span class="hbar"></span><span class="hbar"></span><span class="hbar"></span>
+    </button>
+    <div class="hmenu" id="hmenu" style="display:none">
+      <div class="hmenu-title">Navigation</div>
+      <a class="hmenu-item" href="http://localhost:3000" target="_blank">💬 Chat Interface</a>
+      <a class="hmenu-item" href="http://localhost:3000/#tests" target="_blank">🧪 Test Runner</a>
+      <div class="hmenu-item" onclick="loadIndex();closeHMenu()" style="cursor:pointer">↻ Refresh runs</div>
+    </div>
+  </div>
+</header>
+
+<div class="page-wrap">
+  <!-- ── Main ── -->
+  <main id="main">
+
+    <!-- Welcome / Run picker -->
+    <div id="welcome">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px">
+        <div class="wl-logo">🎬</div>
+        <div style="text-align:left">
+          <h2 style="font-size:24px;color:var(--text);margin-bottom:4px">IMDB Helper — Test Dashboard</h2>
+          <p style="color:var(--muted);font-size:15px">Pick a test run below to view its results</p>
+        </div>
+      </div>
+
+      <!-- Refresh button -->
+      <div style="display:flex;justify-content:center;margin-bottom:16px">
+        <button class="btn" onclick="loadIndex()" style="font-size:15px;padding:8px 22px">↻ Refresh runs</button>
+      </div>
+
+      <!-- Run cards grid — populated by JS -->
+      <div id="run-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;max-width:1000px;margin:0 auto 32px;text-align:left"></div>
+
+      <!-- Manual file load -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;max-width:500px;margin:0 auto;text-align:left">
+        <p style="font-weight:700;color:var(--text);margin-bottom:6px">📂 Load results manually</p>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:10px">Choose a <code style="color:var(--yellow)">summary.json</code> or <code style="color:var(--yellow)">results.jsonl</code> from any run folder</p>
+        <input type="file" id="file-input-fallback" accept=".json,.jsonl" style="color:var(--text);font-size:14px" />
+      </div>
+    </div>
+
+    <!-- Dashboard (hidden until run selected) -->
+    <div id="dashboard" style="display:none">
+
+      <div class="kpi-row" id="kpi-row"></div>
+
+      <div class="chart-row">
+        <div class="card">
+          <h3>Score Distribution</h3>
+          <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Avg Score by Category</h3>
+          <div class="chart-wrap"><canvas id="chart-cat"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="card">
+          <h3>Score Breakdown by Dimension</h3>
+          <div id="dim-bars"></div>
+        </div>
+        <div class="card">
+          <h3>Graph Hit vs Miss</h3>
+          <div class="chart-wrap" style="height:180px"><canvas id="chart-graph"></canvas></div>
+          <h3 style="margin-top:12px;margin-bottom:8px">Pass / Fail by Difficulty</h3>
+          <div class="chart-wrap" style="height:100px"><canvas id="chart-diff"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Category table -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="section-title">Category Breakdown</div>
+        <table class="cat-table" id="cat-table">
+          <thead><tr><th>Category</th><th>Total</th><th>Passed</th><th>Failed</th><th>Avg Score</th><th>Errors</th><th>Pass%</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- Top failures -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="section-title">Top Failures</div>
+        <div class="failure-list" id="failure-list"></div>
+      </div>
+
+      <!-- Results table (only if full JSONL loaded) -->
+      <div id="results-section" style="display:none">
+        <div class="section-title">All Results</div>
+        <div class="table-controls">
+          <input type="text" id="search-input" placeholder="Search questions…" oninput="renderTable()" />
+          <select id="filter-pass" onchange="renderTable()">
+            <option value="">All</option>
+            <option value="pass">Pass only</option>
+            <option value="fail">Fail only</option>
+          </select>
+          <select id="filter-graph" onchange="renderTable()">
+            <option value="">Any graph</option>
+            <option value="hit">Graph hit</option>
+            <option value="miss">Graph miss</option>
+          </select>
+          <span id="table-count" style="color:var(--muted);font-size:13px;margin-left:auto"></span>
+          <button class="btn btn-sm" onclick="exportCSV()">Export CSV</button>
+        </div>
+        <div class="results-table-wrap">
+          <table class="rt" id="results-table">
+            <thead><tr>
+              <th data-col="id">#</th>
+              <th data-col="category">Category</th>
+              <th data-col="difficulty">Level</th>
+              <th data-col="question">Question</th>
+              <th data-col="overall">Score</th>
+              <th data-col="pass">Status</th>
+              <th data-col="graph_miss">Graph</th>
+              <th data-col="duration_ms">Time</th>
+              <th>Answer</th>
+            </tr></thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /dashboard -->
+  </main>
+</div><!-- /page-wrap -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let _runs = [];          // index.json entries
+let _summary = null;     // active summary.json
+let _results = [];       // active results.jsonl rows
+let _sortCol = 'overall', _sortAsc = false;
+let _charts = {};
+let _activeRunId = null;
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+// runs_data.js (included via <script>) sets window.RUNS_INDEX when available.
+// That works with both file:// and http://.
+// When served via http we also try fetch() so refreshing picks up new runs.
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const min = String(d.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+async function loadIndex() {
+  // 1. Use embedded JS data first (always available)
+  if (window.RUNS_INDEX && window.RUNS_INDEX.length) {
+    _runs = window.RUNS_INDEX;
+    renderCards();
+  }
+
+  // 2. Fetch live data from RAG API
+  try {
+    const r = await fetch('/tests/runs?_=' + Date.now());
+    if (r.ok) {
+      const fresh = await r.json();
+      _runs = fresh;
+      renderCards();
+    }
+  } catch { /* API not reachable — fall back to embedded JS data */ }
+}
+
+loadIndex();
+
+// wire file-picker fallback
+document.getElementById('file-input-fallback').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  try {
+    if (file.name.endsWith('.jsonl')) {
+      _results = text.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+      _summary = buildSummaryFromResults(_results);
+    } else {
+      const data = JSON.parse(text);
+      if (data.totals) { _summary = data; }
+      else if (Array.isArray(data)) { _results = data; _summary = buildSummaryFromResults(data); }
+    }
+    renderDashboard();
+  } catch(err) { alert('Could not parse file: ' + err.message); }
+  e.target.value = '';
+});
+
+// ─── Build summary from raw results array (file-picker fallback) ──────────────
+function buildSummaryFromResults(results) {
+  const judged = results.filter(r => r.judge?.overall != null);
+  const passed = judged.filter(r => r.judge.pass);
+  const hits = results.filter(r => !r.graph_query?.graph_miss);
+  const scores = judged.map(r => r.judge.overall);
+  const avg = scores.length ? +(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2) : null;
+  const dimKeys = ['relevance','completeness','accuracy','clarity','navigation_quality','executability'];
+  const dimAcc = Object.fromEntries(dimKeys.map(k=>[k,[]]));
+  for (const r of judged) for (const k of dimKeys) { const v=r.judge?.scores?.[k]; if(v!=null) dimAcc[k].push(v); }
+  const dims = Object.fromEntries(dimKeys.map(k=>[k, dimAcc[k].length ? +(dimAcc[k].reduce((a,b)=>a+b,0)/dimAcc[k].length).toFixed(2) : null]));
+  const bycat = {}, bydiff = {};
+  for (const r of results) {
+    const c=r.category; if(!bycat[c]) bycat[c]={total:0,passed:0,failed:0,errors:0,avg_score:null,_s:[]};
+    bycat[c].total++;
+    if(r.error) bycat[c].errors++;
+    if(r.judge?.overall!=null){ bycat[c]._s.push(r.judge.overall); r.judge.pass?bycat[c].passed++:bycat[c].failed++; }
+    const d=r.difficulty; if(!bydiff[d]) bydiff[d]={total:0,passed:0,avg_score:null,_s:[]};
+    bydiff[d].total++;
+    if(r.judge?.overall!=null){ bydiff[d]._s.push(r.judge.overall); if(r.judge.pass) bydiff[d].passed++; }
+  }
+  for (const c of Object.values(bycat)) { c.avg_score=c._s.length?+(c._s.reduce((a,b)=>a+b,0)/c._s.length).toFixed(2):null; delete c._s; }
+  for (const d of Object.values(bydiff)) { d.avg_score=d._s.length?+(d._s.reduce((a,b)=>a+b,0)/d._s.length).toFixed(2):null; delete d._s; }
+  const failures = judged.filter(r=>!r.judge.pass).sort((a,b)=>a.judge.overall-b.judge.overall).slice(0,20)
+    .map(r=>({id:r.id,question:r.question,category:r.category,difficulty:r.difficulty,overall_score:r.judge.overall,reasoning:r.judge.reasoning||'',weaknesses:r.judge.weaknesses||[]}));
+  return {
+    run_id: 'manual-load', generated_at: new Date().toISOString(),
+    totals: { questions:results.length, answered:results.filter(r=>!r.error).length, errors:results.filter(r=>r.error).length,
+      judged:judged.length, passed:passed.length, failed:judged.length-passed.length,
+      pass_rate_pct: judged.length?+(100*passed.length/judged.length).toFixed(1):null,
+      graph_hits:hits.length, graph_misses:results.length-hits.length,
+      graph_hit_rate_pct: results.length?+(100*hits.length/results.length).toFixed(1):null,
+      videos_recorded:results.filter(r=>r.video?.generated).length, videos_failed:0 },
+    scores: { average_overall: avg, dimensions: dims },
+    timing: { avg_ms: results.length?Math.round(results.reduce((a,r)=>a+(r.duration_ms||0),0)/results.length):null },
+    by_category: bycat, by_difficulty: bydiff, top_failures: failures,
+  };
+}
+
+// ─── Run cards ────────────────────────────────────────────────────────────────
+function renderCards() {
+  const cards = document.getElementById('run-cards');
+  if (!_runs.length) {
+    cards.innerHTML = '<p style="color:var(--muted);font-size:16px;grid-column:1/-1">No test runs found. Use the <strong style="color:var(--yellow)">Test Runner</strong> in the interface to start a benchmark.</p>';
+    return;
+  }
+  cards.innerHTML = _runs.map(r => {
+    const score = r.avg_score;
+    const passR = r.pass_rate_pct;
+    const scoreCls = score == null ? '#8890a8' : score >= 7 ? '#52c07a' : score >= 5 ? '#e09a52' : '#e05252';
+    const date = fmtDate(r.generated_at) || 'unknown date';
+    const active = r.run_id === _activeRunId;
+    return `
+      <div style="
+        background:var(--surface);border:2px solid ${active ? 'var(--yellow)' : 'var(--border)'};
+        border-radius:10px;padding:20px;transition:all .15s;position:relative;
+      " onmouseover="this.style.borderColor='var(--yellow)'" onmouseout="this.style.borderColor='${active ? 'var(--yellow)' : 'var(--border)'}'">
+        <button onclick="deleteRun('${r.run_id}',event)" title="Delete run" style="
+          position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);
+          border-radius:5px;color:var(--red);font-size:14px;padding:2px 8px;line-height:1.4;
+        " onmouseover="this.style.background='#2e1010'" onmouseout="this.style.background='transparent'">✕</button>
+        <div onclick="selectRun('${r.run_id}')" style="cursor:pointer">
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;padding-right:36px">${r.run_id}</div>
+          <div style="font-size:14px;color:var(--muted);margin-bottom:16px">${date}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+            <div style="background:var(--surface2);border-radius:7px;padding:12px 14px">
+              <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Avg Score</div>
+              <div style="font-size:26px;font-weight:800;color:${scoreCls}">${score ?? '—'}</div>
+              <div style="font-size:13px;color:var(--muted)">out of 10</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:7px;padding:12px 14px">
+              <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Pass Rate</div>
+              <div style="font-size:26px;font-weight:800;color:${(passR??0)>=70?'#52c07a':(passR??0)>=50?'#e09a52':'#e05252'}">${passR != null ? passR+'%' : '—'}</div>
+              <div style="font-size:13px;color:var(--muted)">${r.questions} questions</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="pill pill-graph">${r.graph_hit_rate_pct ?? '?'}% graph hit</span>
+            ${r.videos_recorded ? `<span class="pill" style="background:#1a1a2e;color:#9a7fd4">${r.videos_recorded} videos</span>` : ''}
+            ${r.errors ? `<span class="pill pill-err">${r.errors} errors</span>` : '<span class="pill" style="background:#0f2e1a;color:#52c07a">0 errors</span>'}
+          </div>
+          <div style="margin-top:14px;text-align:center;font-size:14px;font-weight:700;color:var(--yellow)">Click to view →</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Select a run ─────────────────────────────────────────────────────────────
+async function selectRun(runId) {
+  _activeRunId = runId;
+  renderCards();
+
+  // Fetch from RAG API
+  try {
+    const r = await fetch(`/tests/runs/${runId}`);
+    if (!r.ok) throw new Error('summary not found');
+    _summary = await r.json();
+  } catch (e) {
+    alert('Could not load summary for run ' + runId + '\n' + e.message);
+    return;
+  }
+  _results = [];
+  try {
+    const r = await fetch(`/results/${runId}/results.jsonl`);
+    if (r.ok) {
+      const text = await r.text();
+      _results = text.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+    }
+  } catch { /* optional */ }
+
+  renderDashboard();
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  renderKPIs(_summary);
+  renderCategoryTable(_summary.by_category || {});
+  renderCategoryChart(_summary.by_category || {});
+  renderGraphChart(_summary.totals || {});
+  renderDifficultyChart(_summary.by_difficulty || {});
+  renderDimensionBars((_summary.scores || {}).dimensions);
+  renderDistributionChart(_results.length ? _results.filter(r=>r.judge?.overall!=null).map(r=>r.judge.overall) : []);
+
+  const failures = _summary.top_failures || [];
+  renderFailures(failures);
+
+  const metaEl = document.getElementById('run-meta');
+  metaEl.innerHTML = `${_summary.run_id || ''}<br>${fmtDate(_summary.generated_at)}`;
+
+  if (_results.length) {
+    document.getElementById('results-section').style.display = '';
+    renderTable();
+  } else {
+    document.getElementById('results-section').style.display = 'none';
+  }
+
+  window.scrollTo(0, 0);
+}
+
+// ─── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKPIs(s) {
+  const t = s.totals || {}, sc = s.scores || {}, tm = s.timing || {};
+  const avgS = sc.average_overall;
+  const passR = t.pass_rate_pct;
+  const scoreClass = avgS == null ? '' : avgS >= 7 ? 'good' : avgS >= 5 ? '' : 'bad';
+  const passClass  = passR == null ? '' : passR >= 70 ? 'good' : passR >= 50 ? '' : 'bad';
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi blue"><div class="label">Questions</div><div class="value">${t.questions||0}</div><div class="sub">${t.answered||0} answered · ${t.errors||0} errors</div></div>
+    <div class="kpi ${scoreClass}"><div class="label">Avg Score</div><div class="value">${avgS??'—'}</div><div class="sub">out of 10</div></div>
+    <div class="kpi ${passClass}"><div class="label">Pass Rate</div><div class="value">${passR!=null?passR+'%':'—'}</div><div class="sub">${t.passed||0}/${t.judged||0} judged</div></div>
+    <div class="kpi"><div class="label">Graph Hit</div><div class="value">${t.graph_hit_rate_pct!=null?t.graph_hit_rate_pct+'%':'—'}</div><div class="sub">${t.graph_hits||0} hits</div></div>
+    <div class="kpi"><div class="label">Videos</div><div class="value">${t.videos_recorded!=null?t.videos_recorded:'—'}</div><div class="sub">${t.videos_failed||0} failed</div></div>
+    <div class="kpi"><div class="label">Avg Time</div><div class="value">${tm.avg_ms?(tm.avg_ms/1000).toFixed(1)+'s':'—'}</div><div class="sub">per question</div></div>`;
+}
+
+// ─── Distribution chart ───────────────────────────────────────────────────────
+function renderDistributionChart(scores) {
+  const b = Array(10).fill(0);
+  for (const s of scores) b[Math.min(9, Math.floor(s))]++;
+  const labels = ['0-1','1-2','2-3','3-4','4-5','5-6','6-7','7-8','8-9','9-10'];
+  const colors = b.map((_,i)=>i<4?'#e05252cc':i<6?'#e09a52cc':'#52c07acc');
+  dc('chart-dist');
+  _charts['chart-dist'] = new Chart(document.getElementById('chart-dist').getContext('2d'),{
+    type:'bar',data:{labels,datasets:[{data:b,backgroundColor:colors,borderRadius:4}]},
+    options:{...bo(),plugins:{legend:{display:false}},scales:{y:{...ya()},x:{...xa()}}}
+  });
+}
+
+// ─── Category chart ───────────────────────────────────────────────────────────
+function renderCategoryChart(bc) {
+  const e = Object.entries(bc).sort((a,b)=>(b[1].avg_score||0)-(a[1].avg_score||0));
+  const labels = e.map(([k])=>k.replace(/_/g,' '));
+  const data = e.map(([,v])=>v.avg_score||0);
+  const colors = data.map(s=>s>=7?'#52c07a':s>=5?'#e09a52':'#e05252');
+  dc('chart-cat');
+  _charts['chart-cat'] = new Chart(document.getElementById('chart-cat').getContext('2d'),{
+    type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:4}]},
+    options:{...bo(),indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{...xa(),min:0,max:10},y:{...ya()}}}
+  });
+}
+
+// ─── Graph donut ──────────────────────────────────────────────────────────────
+function renderGraphChart(t) {
+  dc('chart-graph');
+  _charts['chart-graph'] = new Chart(document.getElementById('chart-graph').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:['Graph Hit','Graph Miss'],datasets:[{data:[t.graph_hits||0,t.graph_misses||0],backgroundColor:['#52c07a','#e09a52'],borderWidth:0}]},
+    options:{...bo(),cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#8890a8',font:{size:10}}}}}
+  });
+}
+
+// ─── Difficulty bar ───────────────────────────────────────────────────────────
+function renderDifficultyChart(bd) {
+  const order=['basic','intermediate','advanced','expert'];
+  const labels=order.filter(d=>bd[d]);
+  dc('chart-diff');
+  _charts['chart-diff'] = new Chart(document.getElementById('chart-diff').getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Passed',data:labels.map(d=>bd[d]?.passed||0),backgroundColor:'#52c07a88',borderRadius:3},
+      {label:'Failed',data:labels.map(d=>(bd[d]?.total||0)-(bd[d]?.passed||0)),backgroundColor:'#e0525288',borderRadius:3},
+    ]},
+    options:{...bo(),scales:{x:{...xa(),stacked:true},y:{...ya(),stacked:true}},plugins:{legend:{labels:{color:'#8890a8',font:{size:9}}}}}
+  });
+}
+
+// ─── Dimension bars ───────────────────────────────────────────────────────────
+function renderDimensionBars(dims) {
+  const keys={relevance:'Relevance',completeness:'Completeness',accuracy:'Accuracy',clarity:'Clarity',navigation_quality:'Navigation',executability:'Executability'};
+  const cols=['#5298e0','#52c07a','#e09a52','#9a7fd4','#e05252','#f5c518'];
+  let html='',i=0;
+  for(const [k,label] of Object.entries(keys)){
+    const v=dims?.[k];
+    const pct=v!=null?v*10:0;
+    html+=`<div class="dim-bar-row">
+      <span class="dim-label">${label}</span>
+      <div class="dim-track"><div class="dim-fill" style="width:${pct}%;background:${cols[i]}"></div></div>
+      <span class="dim-score ${v==null?'sn':v>=7?'sg':v>=5?'sm':'sb'}">${v??'—'}</span>
+    </div>`;
+    i++;
+  }
+  document.getElementById('dim-bars').innerHTML=html||'<p style="color:var(--muted)">No judge data</p>';
+}
+
+// ─── Category table ───────────────────────────────────────────────────────────
+function renderCategoryTable(bc) {
+  document.querySelector('#cat-table tbody').innerHTML=Object.entries(bc)
+    .sort((a,b)=>(b[1].avg_score||0)-(a[1].avg_score||0))
+    .map(([cat,d])=>{
+      const pr=(d.passed||0)+(d.failed||0)>0?(100*(d.passed||0)/((d.passed||0)+(d.failed||0))).toFixed(0)+'%':'—';
+      const sc=d.avg_score;
+      const cls=sc==null?'sn':sc>=7?'sg':sc>=5?'sm':'sb';
+      return `<tr><td>${cat.replace(/_/g,' ')}</td><td>${d.total}</td>
+        <td style="color:var(--green)">${d.passed||0}</td>
+        <td style="color:var(--red)">${d.failed||0}</td>
+        <td class="${cls}" style="font-weight:700">${sc??'—'}</td>
+        <td style="color:var(--muted)">${d.errors||0}</td>
+        <td>${pr}</td></tr>`;
+    }).join('');
+}
+
+// ─── Failures ─────────────────────────────────────────────────────────────────
+function renderFailures(failures) {
+  const el=document.getElementById('failure-list');
+  if(!failures.length){el.innerHTML='<p style="color:var(--muted);font-size:14px">No failures — great job!</p>';return;}
+  el.innerHTML=failures.map(f=>`
+    <div class="failure-item">
+      <div class="fi-header">
+        <span class="fi-id">#${f.id}</span>
+        <span class="fi-score">${f.overall_score?.toFixed(1)??'?'}</span>
+        <span class="fi-q">${f.question}</span>
+        <span class="badge badge-${f.difficulty}">${f.difficulty}</span>
+      </div>
+      ${(f.weaknesses||[]).length?`<div class="fi-weaknesses">⚠ ${f.weaknesses.slice(0,2).join(' · ')}</div>`:''}
+      ${f.reasoning?`<div class="fi-reasoning">${f.reasoning}</div>`:''}
+    </div>`).join('');
+}
+
+// ─── Results table ────────────────────────────────────────────────────────────
+function renderTable() {
+  const search=(document.getElementById('search-input')?.value||'').toLowerCase();
+  const passF=document.getElementById('filter-pass')?.value||'';
+  const graphF=document.getElementById('filter-graph')?.value||'';
+
+  let rows=_results.filter(r=>{
+    if(passF==='pass'&&!r.judge?.pass) return false;
+    if(passF==='fail'&&r.judge?.pass!==false) return false;
+    if(graphF==='hit'&&r.graph_query?.graph_miss) return false;
+    if(graphF==='miss'&&!r.graph_query?.graph_miss) return false;
+    if(search&&!r.question?.toLowerCase().includes(search)&&!(r.rag_response?.answer||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    let av,bv;
+    if(_sortCol==='overall'){av=a.judge?.overall??-1;bv=b.judge?.overall??-1;}
+    else if(_sortCol==='pass'){av=a.judge?.pass?1:0;bv=b.judge?.pass?1:0;}
+    else if(_sortCol==='graph_miss'){av=a.graph_query?.graph_miss?1:0;bv=b.graph_query?.graph_miss?1:0;}
+    else{av=a[_sortCol]??'';bv=b[_sortCol]??'';}
+    if(typeof av==='string')av=av.toLowerCase();
+    if(typeof bv==='string')bv=bv.toLowerCase();
+    return _sortAsc?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);
+  });
+
+  document.getElementById('table-count').textContent=`${rows.length} of ${_results.length}`;
+  document.getElementById('results-tbody').innerHTML=rows.map(r=>{
+    const sc=r.judge?.overall;
+    const cls=sc==null?'sn':sc>=7?'sg':sc>=5?'sm':'sb';
+    const pass=r.judge?.pass;
+    const gm=r.graph_query?.graph_miss;
+    return `
+      <tr onclick="toggleDetail(${r.id})">
+        <td>${r.id}</td>
+        <td style="font-size:12px;color:var(--muted)">${(r.category||'').replace(/_/g,' ')}</td>
+        <td><span class="badge badge-${r.difficulty}">${r.difficulty}</span></td>
+        <td class="q-text">${r.question}</td>
+        <td><span class="score-num ${cls}">${sc!=null?sc.toFixed(1):'—'}</span></td>
+        <td>${pass==null?'<span class="sn">—</span>':pass?'<span class="badge badge-pass">pass</span>':'<span class="badge badge-fail">fail</span>'}</td>
+        <td><span class="graph-badge ${gm?'graph-miss':'graph-hit'}">${gm?'MISS':'HIT'}</span></td>
+        <td>${r.duration_ms?(r.duration_ms/1000).toFixed(1)+'s':'—'}</td>
+        <td class="ans-preview">${(r.rag_response?.answer||'').replace(/</g,'&lt;').slice(0,70)}…</td>
+      </tr>
+      <tr class="detail-row" id="detail-${r.id}">
+        <td colspan="9" class="detail-cell">${buildDetailHTML(r)}</td>
+      </tr>`;
+  }).join('');
+
+  document.querySelectorAll('table.rt th').forEach(th=>{
+    th.classList.toggle('sorted',th.dataset.col===_sortCol);
+    th.onclick=()=>{
+      if(_sortCol===th.dataset.col)_sortAsc=!_sortAsc;
+      else{_sortCol=th.dataset.col;_sortAsc=true;}
+      renderTable();
+    };
+  });
+}
+
+function toggleDetail(id){
+  const el=document.getElementById('detail-'+id);
+  if(el) el.classList.toggle('open');
+}
+
+function buildDetailHTML(r){
+  const steps=r.playwright_steps||[];
+  const judge=r.judge||{};
+  const scores=judge.scores||{};
+  const gq=r.graph_query||{};
+  const answer=r.rag_response?.answer||'';
+  const video=r.video||{};
+  const script=video.playback_script;
+
+  const stepsHtml=steps.length?`<ul class="steps-list">${steps.map(s=>{
+    const ib=`ib-${s.interaction_type||'navigate'}`;
+    return `<li><span class="step-num">${s.step}</span>
+      <div class="step-info">
+        <div class="step-desc">${s.description} <span class="ib ${ib}">${s.interaction_type||'navigate'}</span></div>
+        ${s.target?`<div class="step-meta">Target: ${s.target}</div>`:''}
+        ${s.url?`<div class="step-url">${s.url}</div>`:''}
+        ${s.synthetic?`<div class="step-meta" style="color:var(--orange)">⚡ LLM-generated</div>`:''}
+      </div></li>`;
+  }).join('')}</ul>`:'<p>No steps</p>';
+
+  const dimKeys=['relevance','completeness','accuracy','clarity','navigation_quality','executability'];
+  const dimHtml=dimKeys.map(k=>{
+    const v=scores[k];
+    const cls=v==null?'sn':v>=7?'sg':v>=5?'sm':'sb';
+    return `<div class="jsi"><div class="jl">${k.replace('_',' ')}</div><div class="jv ${cls}">${v??'—'}</div></div>`;
+  }).join('');
+
+  let videoHtml='';
+  if(video.generated&&video.url){
+    videoHtml=`<div class="detail-block"><h4>Video</h4><p><a href="${video.url}" target="_blank">▶ Watch recording</a></p></div>`;
+  } else if(script?.lines?.length){
+    const rows=script.lines.map(l=>`<tr>
+      <td style="color:var(--yellow);font-weight:700">${l.step}</td>
+      <td>${l.human_instruction}</td>
+      <td><span class="ib ib-${l.interaction_type||'navigate'}">${l.interaction_type||'navigate'}</span></td>
+      <td><code>${l.playwright_command}</code></td>
+      <td style="color:${l.synthetic?'var(--orange)':'var(--muted)'};font-size:11px">${l.note}</td>
+    </tr>`).join('');
+    videoHtml=`<div class="detail-block"><h4>Playback Script (video OFF)</h4>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:6px">${script.reason}</p>
+      <div style="overflow-x:auto"><table class="playback-table">
+        <thead><tr><th>#</th><th>Instruction</th><th>Type</th><th>Playwright</th><th>Source</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div></div>`;
+  }
+
+  return `<div class="detail-inner"><div class="detail-grid">
+    <div>
+      <div class="detail-block"><h4>Answer</h4><div class="answer-box">${answer.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div></div>
+      <div class="detail-block"><h4>Graph Query</h4>
+        <p>Start: <b>${gq.start_node_id||'—'}</b></p>
+        <p>End: <b>${gq.end_node_id||'—'}</b></p>
+        <p>Path: ${gq.path_description||'—'}</p>
+        <p>Result: <span class="graph-badge ${gq.graph_miss?'graph-miss':'graph-hit'}">${gq.graph_miss?'MISS':'HIT'}</span></p>
+      </div>
+      ${videoHtml}
+    </div>
+    <div>
+      <div class="detail-block"><h4>AI Judge — Overall: ${judge.overall??'—'}</h4>
+        <div class="judge-grid">${dimHtml}</div>
+        ${judge.reasoning?`<p style="color:var(--muted);font-size:12px;margin-top:4px">${judge.reasoning}</p>`:''}
+        ${(judge.strengths||[]).length?`<p style="color:var(--green);font-size:12px;margin-top:4px">✓ ${judge.strengths.join(' · ')}</p>`:''}
+        ${(judge.weaknesses||[]).length?`<p style="color:var(--orange);font-size:12px;margin-top:2px">⚠ ${judge.weaknesses.join(' · ')}</p>`:''}
+      </div>
+      <div class="detail-block"><h4>Playwright Steps (${steps.length})</h4>${stepsHtml}</div>
+    </div>
+  </div></div>`;
+}
+
+function showHome(){
+  _activeRunId = null;
+  document.getElementById('welcome').style.display = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('run-meta').innerHTML = '';
+  renderCards();
+}
+
+// ─── Delete run ───────────────────────────────────────────────────────────────
+async function deleteRun(runId, e) {
+  e.stopPropagation();
+  if (!confirm(`Delete run "${runId}" and its associated videos?\nThis cannot be undone.`)) return;
+  try {
+    const r = await fetch(`/tests/runs/${runId}`, {method:'DELETE'});
+    if (!r.ok) throw new Error(await r.text());
+    _runs = _runs.filter(x => x.run_id !== runId);
+    if (_activeRunId === runId) showHome();
+    else renderCards();
+  } catch(err) { alert('Delete failed: ' + err.message); }
+}
+
+// ─── Hamburger menu ───────────────────────────────────────────────────────────
+function toggleHMenu(){
+  const m = document.getElementById('hmenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+function closeHMenu(){ document.getElementById('hmenu').style.display = 'none'; }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.hbtn') && !e.target.closest('#hmenu')) closeHMenu();
+});
+
+function exportCSV(){
+  const headers=['id','category','difficulty','question','overall','pass','graph_miss','duration_ms','answer'];
+  const rows=_results.map(r=>[r.id,r.category,r.difficulty,JSON.stringify(r.question),r.judge?.overall??'',r.judge?.pass??'',r.graph_query?.graph_miss??'',r.duration_ms||'',JSON.stringify((r.rag_response?.answer||'').slice(0,200))]);
+  const csv=[headers.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='results.csv';a.click();
+}
+
+// ─── Chart helpers ────────────────────────────────────────────────────────────
+function dc(id){if(_charts[id]){_charts[id].destroy();delete _charts[id];}}
+function bo(){return{responsive:true,maintainAspectRatio:false,animation:{duration:350},plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1e2e',titleColor:'#e0e4f0',bodyColor:'#8890a8',borderColor:'#2a2e42',borderWidth:1}}};}
+function xa(){return{grid:{color:'#2a2e42'},ticks:{color:'#8890a8',font:{size:10}}};}
+function ya(){return{grid:{color:'#2a2e42'},ticks:{color:'#8890a8',font:{size:10}}};}
+</script>
+</body>
+</html>

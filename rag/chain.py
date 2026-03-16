@@ -61,6 +61,15 @@ Your response must be a JSON object with exactly two keys:
 - "answer": a concise numbered step-by-step guide for the user (markdown allowed, include real URLs)
 - "steps": a JSON array of navigation steps the recorder will execute
 
+CRITICAL RULES — read carefully before responding:
+- NEVER use Inception, The Dark Knight, or any other specific movie as an example UNLESS the user explicitly asked about that movie. For generic queries (genre filters, advanced search, franchise search, etc.) always use the URL patterns from the IMDb context — do NOT substitute a specific movie example.
+- For genre/filter/advanced-search queries, ALWAYS use the relevant https://www.imdb.com/search/title/?... URL from the context. Do NOT navigate to a specific movie page.
+- For franchise queries (Marvel, MCU, Star Wars, James Bond, etc.), use the keyword search URL pattern from context.
+- For multi-actor / co-appearance queries, use the role= URL pattern from context.
+- For TV episode queries (e.g. best episode of a show), use the /episodes/?season= URL pattern from context.
+- For award queries (Oscar, BAFTA, Emmy, Golden Globe), use the /awards-central/ and groups= URL patterns from context.
+- For "mark as watched" / check-in queries, describe the eye/checkmark icon on the title page and the watchlist URL.
+
 Rules for "answer":
 - ALWAYS describe the navigation as a sequence of human actions (click, search, scroll) — not just a URL
 - Each step should describe what the user sees and does: e.g. "Search for 'Frasier' in the search bar", "Click the TV series result", "Click the 'Episodes' tab", "Select Season 1 from the dropdown"
@@ -68,6 +77,7 @@ Rules for "answer":
 - ONLY use URLs and IMDb title IDs (ttXXXXXXX) that are EXPLICITLY listed in the IMDb context provided
 - NEVER guess or invent a title ID — describe the navigation instead
 - For language/country searches, use: https://www.imdb.com/search/title/?languages=<code>&sort=year,desc
+- For advanced filter searches, build the URL from the parameter patterns listed in the IMDb context
 
 Rules for "steps":
 - The steps array MUST have exactly one entry per numbered step in "answer" — they must match 1-to-1
@@ -122,6 +132,13 @@ class QueryChain:
             and steps[0].get("synthetic") is not True
         )
 
+        # Miss if all steps have null interaction_type — means no real edge traversal (no path found,
+        # just a destination node returned by _search_fallback or a single-node match)
+        if not graph_miss and steps and all(
+            s.get("action", {}).get("interaction_type") is None for s in steps
+        ):
+            graph_miss = True
+
         # Also a miss if the last step's description doesn't match the end intent at all
         if not graph_miss and end_description and steps:
             last_desc = steps[-1].get("description", "").lower()
@@ -129,18 +146,79 @@ class QueryChain:
             if intent_words and not any(w in last_desc for w in intent_words):
                 graph_miss = True
 
-        # Force miss for language/country/nationality queries — the graph has no such nodes
-        _LANGUAGE_KEYWORDS = {
+        # Miss if any step description references a specific title/person that wasn't in the question
+        # (e.g. path lands on Inception pages when the user asked a generic question)
+        if not graph_miss and steps:
+            q_lower = question.lower()
+            _SPECIFIC_TITLES = ["inception", "the matrix", "dark knight", "godfather", "shawshank",
+                                 "breaking bad", "game of thrones", "frasier", "tt1375666", "tt0133093"]
+            for title in _SPECIFIC_TITLES:
+                if title not in q_lower:
+                    for step in steps:
+                        if title in step.get("description", "").lower() or title in step.get("url", "").lower():
+                            graph_miss = True
+                            break
+                if graph_miss:
+                    break
+
+        # Force miss for queries the graph cannot answer — language/country, advanced filters,
+        # franchise/collection, cross-award, multi-actor co-appearance, show-specific episode rankings,
+        # genre filters, colour filters, keyword searches, and "mark as watched" user features
+        _FORCE_MISS_KEYWORDS = {
+            # Language / nationality
             "spanish", "french", "italian", "german", "japanese", "korean",
             "chinese", "portuguese", "russian", "arabic", "hindi", "turkish",
             "swedish", "danish", "norwegian", "polish", "dutch",
             "mexico", "spain", "france", "italy", "germany", "brazil",
+            "south korea", "united kingdom", "british", "uk ",
+            # Genre filter queries
+            "horror", "war movie", "war film", "sci-fi", "science fiction",
+            "documentary", "mini-series", "miniseries", "limited series",
+            "short film", "short horror",
+            # Colour / visual style filters
+            "black and white", "black & white", "b&w", "monochrome",
+            # Advanced multi-criteria / combined filters
+            "highest rated", "top rated", "sorted by rating", "sort by rating",
+            "best rated", "most voted", "filter by", "search filter",
+            # Franchise / collection
+            "franchise", "marvel", "mcu", "dc extended", "dceu",
+            "star wars", "james bond", "harry potter", "lord of the rings",
+            "stephen king", "based on novel", "based on book",
+            # Multi-actor / co-appearance
+            "both ", "co-star", "co-appear", "appeared together", "movies with both",
+            "films with both", "starring both",
+            # Cross-award searches
+            "oscar and bafta", "oscar & bafta", "bafta and oscar",
+            "emmy and", "golden globe and", "award winner", "award nominee",
+            "cross-award", "multiple award",
+            # Show-specific episode ranking
+            "highest rated episode", "best episode", "top episode",
+            "sopranos episode", "breaking bad episode", "game of thrones episode",
+            # Mark as watched / user account features
+            "mark as watched", "mark as seen", "check-in", "checkin",
+            "watched list", "seen list", "add to watched",
+            # World War / historical keyword searches
+            "world war ii", "wwii", "world war 2", "ww2",
+            # Ongoing / season count queries
+            "still ongoing", "still airing", "still running", "number of seasons",
+            "how many seasons",
+            # Generic person/search queries — graph only has specific movie paths,
+            # so "how do I find/look up an actor/director/writer" must use search steps
+            "look up an actor", "look up actor", "look up a director", "look up director",
+            "find an actor", "find a director", "find an actress", "find a writer",
+            "find a person", "search for an actor", "search for a director",
+            "look up a person", "look up someone", "find someone on imdb",
+            "look up a tv show", "find a tv show", "search for a tv show",
+            "look up a show", "find a show",
+            # Generic navigation questions that need general search instructions
+            "how do i find a", "how do i look up", "how to find a", "how to look up",
         }
-        if not graph_miss and any(kw in question.lower() for kw in _LANGUAGE_KEYWORDS):
+        q_lower = question.lower()
+        if not graph_miss and any(kw in q_lower for kw in _FORCE_MISS_KEYWORDS):
             graph_miss = True
 
         # 3. Retrieve IMDb context chunks
-        rag_chunks = self._vector_store.search(question, k=5)
+        rag_chunks = self._vector_store.search(question, k=8)
         context_text = "\n\n".join(c["text"] for c in rag_chunks) if rag_chunks else ""
 
         if not graph_miss:
@@ -203,6 +281,10 @@ class QueryChain:
             if not isinstance(item, dict):
                 continue
             url = item.get("url", "") or ""
+
+            # Replace generic movie/title placeholder tokens with a real example movie (Inception)
+            # so the recorder can navigate to an actual page instead of skipping the step.
+            url = re.sub(r"<(tt_id|movie_id|title_id|tt\w*id\w*)>", "tt1375666", url, flags=re.IGNORECASE)
             action = item.get("action") or {}
             itype = action.get("interaction_type")
             target = action.get("target_element_id") or ""

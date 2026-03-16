@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright, Page, BrowserContext
+from request_logger import log_entry, now_ms
 
 VIDEOS_DIR = "/app/videos"
 HOME_URL = "https://www.imdb.com"
@@ -135,25 +136,6 @@ async def _move_and_click(page: Page, locator, pause_ms: int = 500) -> None:
     await locator.click()
 
 
-async def _dismiss_cookies(page: Page) -> None:
-    """Dismiss the IMDb cookie/consent banner."""
-    selectors = [
-        'button[data-testid="accept-button"]',
-        'button:has-text("Accept All")',
-        'button:has-text("Accept all")',
-        'button:has-text("Accept")',
-    ]
-    for sel in selectors:
-        try:
-            btn = page.locator(sel).first
-            if await btn.is_visible(timeout=2000):
-                await _move_and_click(page, btn, pause_ms=500)
-                await page.wait_for_timeout(800)
-                return
-        except Exception:
-            continue
-
-
 async def _navigate_via_menu(page: Page, target_url: str) -> bool:
     """
     Reach target_url by clicking through on-page links/menu instead of
@@ -203,10 +185,32 @@ async def _navigate_via_menu(page: Page, target_url: str) -> bool:
     return False
 
 
+async def _dismiss_cookie_banner(page: Page) -> None:
+    """Silently dismiss the IMDb cookie/consent banner if present."""
+    for sel in [
+        'button[data-testid="accept-button"]',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept all")',
+        'button:has-text("Accept")',
+        '[class*="consent"] button',
+    ]:
+        try:
+            btn = page.locator(sel).first
+            if await btn.is_visible(timeout=1500):
+                await btn.click()
+                await page.wait_for_timeout(600)
+                log_entry("record_cookie_dismissed", {"selector": sel, "phase": "recording"})
+                return
+        except Exception:
+            continue
+
+
 async def _goto(page: Page, url: str) -> None:
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(1500)
+        await _dismiss_cookie_banner(page)
+        await page.wait_for_timeout(1000)
     except Exception:
         pass
 
@@ -242,15 +246,17 @@ async def _perform_search(page: Page, search_term: str) -> bool:
     return False
 
 
-async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
+async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Record a tutorial video starting from IMDb home page.
-    Uses human-like mouse movement and dismisses the cookie banner first.
+    Returns {"path": str|None, "actual_steps": [{step, actual_url, method}]}
+    so callers can compare intended vs actual URLs for judge evaluation.
     """
     os.makedirs(VIDEOS_DIR, exist_ok=True)
     video_id = uuid.uuid4().hex
     video_dir = f"/tmp/pw_video_{video_id}"
     os.makedirs(video_dir, exist_ok=True)
+    actual_steps: list[dict] = []
 
     _BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
     _CONTEXT_OPTS: dict = dict(
@@ -271,39 +277,42 @@ async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
             browser = await p.chromium.launch(args=_BROWSER_ARGS)
 
             # ── Phase 1: dismiss cookies WITHOUT recording ──────────────────
-            # IMDb stores consent in localStorage, so we capture the full
-            # localStorage state after accepting and inject it into Phase 2.
+            # Playwright's storage_state() captures cookies + localStorage
+            # per origin — the reliable way to transfer full consent state.
             prep_ctx: BrowserContext = await browser.new_context(**_CONTEXT_OPTS)
             prep_page = await prep_ctx.new_page()
             await _goto(prep_page, HOME_URL)
-            await _dismiss_cookies(prep_page)
-            await prep_page.wait_for_timeout(1000)
-            # Capture localStorage and cookies from the consented session
-            local_storage: str = await prep_page.evaluate(
-                "() => JSON.stringify(Object.fromEntries(Object.entries(localStorage)))"
-            )
-            cookies = await prep_ctx.cookies()
+            dismissed = False
+            for sel in [
+                'button[data-testid="accept-button"]',
+                'button:has-text("Accept All")',
+                'button:has-text("Accept all")',
+                'button:has-text("Accept")',
+            ]:
+                try:
+                    btn = prep_page.locator(sel).first
+                    if await btn.is_visible(timeout=4000):
+                        await btn.click()
+                        await prep_page.wait_for_timeout(1000)
+                        dismissed = True
+                        log_entry("record_cookie", {"selector": sel, "dismissed": True})
+                        break
+                except Exception:
+                    continue
+            if not dismissed:
+                log_entry("record_cookie", {"dismissed": False})
+            await prep_page.wait_for_timeout(800)
+            # Capture full storage state (cookies + localStorage per origin)
+            storage = await prep_ctx.storage_state()
             await prep_ctx.close()
 
             # ── Phase 2: recording starts with consent already applied ──────
             context: BrowserContext = await browser.new_context(
                 **_CONTEXT_OPTS,
+                storage_state=storage,
                 record_video_dir=video_dir,
                 record_video_size={"width": 1280, "height": 720},
             )
-            await context.add_cookies(cookies)
-            # Inject localStorage before any page script runs — this prevents
-            # the consent banner from appearing entirely
-            await context.add_init_script(f"""
-                (() => {{
-                    try {{
-                        const stored = {local_storage};
-                        for (const [k, v] of Object.entries(stored)) {{
-                            localStorage.setItem(k, v);
-                        }}
-                    }} catch(e) {{}}
-                }})();
-            """)
             await context.add_init_script(_CURSOR_SCRIPT)
             page = await context.new_page()
 
@@ -313,38 +322,87 @@ async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
             await page.wait_for_timeout(800)
 
             # Navigate each step, dispatching on interaction_type
-            for step in steps:
+            for i, step in enumerate(steps):
                 url = step.get("url", "") or ""
                 action = step.get("action") or {}
                 interaction = action.get("interaction_type")
                 target = action.get("target_element_id") or ""
+                description = step.get("description", f"Step {i + 1}")
+                t0 = now_ms()
 
                 if url == HOME_URL:
+                    log_entry("record_step", {"step": i, "description": description, "skipped": "home_url"})
                     continue
 
+                # Strip placeholder URLs that contain template tokens like <user_id>
+                if url and ("<" in url or ">" in url):
+                    log_entry("record_step", {"step": i, "description": description, "skipped": "placeholder_url"})
+                    url = ""
+
+                log_entry("record_step_start", {
+                    "step": i, "description": description,
+                    "interaction": interaction, "target": target, "url": url,
+                })
+
                 if interaction == "search_query" and target:
-                    success = await _perform_search(page, target)
-                    if not success and url:
+                    # Distinguish between:
+                    #   - Filter URL   → URL has query params (not /find/) → goto URL directly
+                    #                    Do NOT use _navigate_via_menu — it strips query params
+                    #   - Real search  → target has spaces or starts uppercase → type in search bar
+                    #   - Param value  → target like "short","feature","runtime,asc", no URL → skip
+                    is_filter_url = url and "?" in url and "/find" not in url
+                    is_real_search = " " in target or (target and target[0].isupper())
+
+                    if is_filter_url:
+                        # Navigate directly with full URL (preserves query params)
                         await _goto(page, url)
+                        await _dismiss_cookie_banner(page)
+                        actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": "goto_filter"})
+                        log_entry("record_step", {
+                            "step": i, "description": description,
+                            "method": "goto_filter", "success": True,
+                        }, duration_ms=now_ms() - t0)
+
+                    elif is_real_search or url:
+                        success = await _perform_search(page, target)
+                        if not success and url:
+                            await _goto(page, url)
+                        await _dismiss_cookie_banner(page)
+                        actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": "search"})
+                        log_entry("record_step", {
+                            "step": i, "description": description,
+                            "method": "search", "success": success or bool(url),
+                        }, duration_ms=now_ms() - t0)
+
+                    else:
+                        actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": "skipped_param_no_url"})
+                        log_entry("record_step", {
+                            "step": i, "description": description,
+                            "method": "skipped_param_no_url", "success": False,
+                        }, duration_ms=now_ms() - t0)
 
                 elif interaction == "click" and target and not target.startswith("state_"):
                     clicked = False
+                    method_used = None
                     # Build list of locator strategies: text match first, then CSS
                     is_css = target.startswith(("#", ".", "[", ">")) or " " not in target.strip()
                     locator_attempts = []
                     if not is_css:
                         locator_attempts += [
-                            page.get_by_text(target, exact=False).first,
-                            page.locator(f"a:has-text('{target}')").first,
+                            ("get_by_text", page.get_by_text(target, exact=False).first),
+                            ("a:has-text", page.locator(f"a:has-text('{target}')").first),
                         ]
-                    locator_attempts.append(page.locator(target).first)
-                    for locator in locator_attempts:
+                    locator_attempts.append(("css", page.locator(target).first))
+                    for strategy, locator in locator_attempts:
                         try:
                             if await locator.is_visible(timeout=2000):
                                 await _move_and_click(page, locator, pause_ms=500)
                                 await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                                await page.wait_for_timeout(2500)
+                                await page.wait_for_timeout(1500)
+                                await _dismiss_cookie_banner(page)
+                                await page.wait_for_timeout(1000)
                                 clicked = True
+                                method_used = strategy
                                 break
                         except Exception:
                             continue
@@ -353,23 +411,53 @@ async def record_navigation(steps: list[dict[str, Any]]) -> str | None:
                             navigated = await _navigate_via_menu(page, url)
                             if not navigated:
                                 await _goto(page, url)
+                                method_used = "goto_fallback"
+                            else:
+                                method_used = "menu_fallback"
+                    actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": method_used or "click_failed"})
+                    log_entry("record_step", {
+                        "step": i, "description": description,
+                        "method": method_used or "click_failed", "success": clicked or bool(url),
+                    }, duration_ms=now_ms() - t0)
 
                 elif url:
-                    navigated = await _navigate_via_menu(page, url)
-                    if not navigated:
+                    # "navigate" interaction type means go directly to the URL.
+                    # _navigate_via_menu uses only the path component and can match
+                    # the wrong link (e.g. /search/title/ matches podcast pages).
+                    # Only use menu navigation as a fallback for non-navigate steps.
+                    if interaction == "navigate" or "?" in url:
                         await _goto(page, url)
+                        method = "goto_filter" if "?" in url else "goto"
+                    else:
+                        navigated = await _navigate_via_menu(page, url)
+                        if not navigated:
+                            await _goto(page, url)
+                            method = "goto"
+                        else:
+                            method = "menu_link"
+                    actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": method})
+                    log_entry("record_step", {
+                        "step": i, "description": description,
+                        "method": method, "success": True,
+                    }, duration_ms=now_ms() - t0)
+
+                else:
+                    actual_steps.append({"step": i, "actual_url": page.url, "actual_title": await page.title(), "method": "skipped"})
+                    log_entry("record_step", {
+                        "step": i, "description": description,
+                        "method": "skipped_no_url_no_target", "success": False,
+                    }, duration_ms=now_ms() - t0)
 
             await page.wait_for_timeout(2500)
             await context.close()
             await browser.close()
 
         video_files = [f for f in os.listdir(video_dir) if f.endswith(".webm")]
-        if not video_files:
-            return None
-
-        dest = os.path.join(VIDEOS_DIR, f"{video_id}.webm")
-        shutil.move(os.path.join(video_dir, video_files[0]), dest)
-        return dest
+        dest = None
+        if video_files:
+            dest = os.path.join(VIDEOS_DIR, f"{video_id}.webm")
+            shutil.move(os.path.join(video_dir, video_files[0]), dest)
+        return {"path": dest, "actual_steps": actual_steps}
 
     finally:
         shutil.rmtree(video_dir, ignore_errors=True)

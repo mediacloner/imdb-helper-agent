@@ -108,6 +108,10 @@ try {
   console.log(`  Edges to import: ${edges.length}`);
   console.log(`  Batch size: ${BATCH_SIZE}\n`);
 
+  console.log('Clearing existing graph data...');
+  await session.run('MATCH (n:UIState) DETACH DELETE n');
+  console.log('  Done.\n');
+
   console.log('Importing nodes...');
   const nodeCount = await importNodes(session);
 

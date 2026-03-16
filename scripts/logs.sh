@@ -132,6 +132,30 @@ for line in lines:
             if url:
                 print(f"  {'':14s}       {url}")
 
+    elif event == "RECORD_COOKIE":
+        dismissed = e.get("dismissed", False)
+        icon = "✓" if dismissed else "✗"
+        sel = e.get("selector", "—")
+        print(f"  COOKIE {icon}  [{ts}]")
+        print(SEP_LIGHT)
+        if dismissed:
+            print(f"  {'Selector':14s}  {sel}")
+        else:
+            print(f"  {'Result':14s}  banner not found")
+
+    elif event in ("RECORD_STEP", "RECORD_STEP_START"):
+        label = "STEP>" if event == "RECORD_STEP_START" else "STEP "
+        print(f"  {label}{dur(ms)}  [{ts}]")
+        print(SEP_LIGHT)
+        print(f"  {'#':14s}  {e.get('step', '?')}  {e.get('description', '')}")
+        if event == "RECORD_STEP_START":
+            print(f"  {'interaction':14s}  {e.get('interaction', '')}  →  {e.get('target', '') or '(url only)'}")
+            if e.get("url"):
+                print(f"  {'url':14s}  {e.get('url')}")
+        else:
+            ok = "✓" if e.get("success") else "✗"
+            print(f"  {'method':14s}  {e.get('method', '')}  {ok}")
+
     else:
         print(f"  {event}{dur(ms)}  [{ts}]")
         print(SEP_LIGHT)

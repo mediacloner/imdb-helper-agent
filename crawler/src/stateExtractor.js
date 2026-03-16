@@ -186,7 +186,8 @@ export async function extractState(page, nodeId) {
           cssSelector = `${anchor}${tag}${firstClass}:nth-of-type(${idx})`;
         }
 
-        results.push({ role, text, ariaLabel, cssSelector, dataTestId });
+        const href = (el.tagName.toLowerCase() === 'a') ? (el.getAttribute('href') || '') : '';
+        results.push({ role, text, ariaLabel, cssSelector, dataTestId, href });
       }
 
       return results;
@@ -208,6 +209,7 @@ export async function extractState(page, nodeId) {
       css_selector: el.cssSelector,
       text: el.text,
       aria_label: el.ariaLabel,
+      href: el.href || undefined,
     };
   });
 

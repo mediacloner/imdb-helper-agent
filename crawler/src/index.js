@@ -10,7 +10,7 @@ import path from 'path';
 import { crawl } from './crawler.js';
 
 const START_URL = process.env.START_URL || 'https://www.imdb.com';
-const MAX_PAGES = parseInt(process.env.MAX_PAGES || '10', 10);
+const MAX_PAGES = parseInt(process.env.MAX_PAGES || '100', 10);
 const OUTPUT_PATH = '/app/output/graph.json';
 const REPORT_PATH = '/app/output/report.md';
 
@@ -71,6 +71,14 @@ function generateReport(graph, startUrl, maxPages, durationMs) {
   }
 
   lines.push(`---\n`);
+  lines.push(`## Page Type Coverage\n`);
+  const types = graph.visitedTypes || [];
+  lines.push(`**${types.length} structural types visited:**\n`);
+  for (const t of types) {
+    lines.push(`- \`${t}\``);
+  }
+
+  lines.push(`\n---\n`);
   lines.push(`## Capability Coverage\n`);
   const capCount = {};
   for (const node of graph.nodes) {

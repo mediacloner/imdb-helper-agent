@@ -26,6 +26,10 @@ crawler/output/
 .DS_Store
 Thumbs.db
 
+# Test results and venv (generated)
+tests/results/*/
+tests/.venv/
+
 # Editor
 .vscode/
 .idea/
