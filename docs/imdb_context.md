@@ -120,6 +120,7 @@ Known people:
 
 ## Charts and Lists
 - IMDb Top 250 Movies: https://www.imdb.com/chart/top/
+- IMDb Bottom 100 Movies (lowest rated): https://www.imdb.com/chart/bottom/
 - Most Popular Movies: https://www.imdb.com/chart/moviemeter/
 - IMDb Top 250 TV Shows: https://www.imdb.com/chart/toptv/
 - Most Popular TV Shows: https://www.imdb.com/chart/tvmeter/
@@ -466,3 +467,31 @@ To find episode count for each season of any TV show:
 1. Go to the show's episodes page: https://www.imdb.com/title/<tt_id>/episodes/
 2. In the season selector at the top, each season number is listed
 3. The count of episodes per season is shown in each season's listing
+
+## Contributing and Reporting Errors
+- IMDb Contribution Portal: https://contribute.imdb.com/
+- To report incorrect info on a title page: navigate to the title, then click "Edit page" button (visible on most title pages)
+- Alternatively use: https://contribute.imdb.com/updates
+- To suggest a new title: https://contribute.imdb.com/ → click "Add a new title"
+- NOTE: There is NO public "follow other users" feature on IMDb.
+
+## Title Sub-Page URL Patterns
+For any movie or TV show with known ID (e.g. tt1375666 for Inception):
+- User reviews:       https://www.imdb.com/title/tt1375666/reviews/
+- Trivia:             https://www.imdb.com/title/tt1375666/trivia/
+- Goofs:              https://www.imdb.com/title/tt1375666/goofs/
+- Quotes:             https://www.imdb.com/title/tt1375666/quotes/
+- Parental guide:     https://www.imdb.com/title/tt1375666/parentalguide/
+- Filming locations:  https://www.imdb.com/title/tt1375666/locations/
+- Full cast & crew:   https://www.imdb.com/title/tt1375666/fullcredits/
+- Awards:             https://www.imdb.com/title/tt1375666/awards/
+- Box office/Budget:  https://www.imdb.com/title/tt1375666/business/
+- Soundtrack:         https://www.imdb.com/title/tt1375666/soundtrack/
+- Technical specs:    https://www.imdb.com/title/tt1375666/technical/
+- Release info/dates: https://www.imdb.com/title/tt1375666/releaseinfo/
+- Plot summary:       https://www.imdb.com/title/tt1375666/plotsummary/
+- Connections:        https://www.imdb.com/title/tt1375666/movieconnections/
+- Keywords:           https://www.imdb.com/title/tt1375666/keywords/
+- FAQ:                https://www.imdb.com/title/tt1375666/faq/
+- Alternate titles:   https://www.imdb.com/title/tt1375666/releaseinfo/#akas
+- Social media links: https://www.imdb.com/title/tt1375666/externalsites/

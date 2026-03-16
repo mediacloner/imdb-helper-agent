@@ -8,6 +8,39 @@ from vector_store import VectorStore
 
 # Title IDs verified to exist — any other tt-ID in a generated URL will be stripped
 # so the recorder clicks from search results instead of navigating to a wrong page
+# Default example title used when the LLM omits sub-page URLs
+_DEFAULT_EXAMPLE_ID = "tt1375666"  # Inception
+
+# Maps description keywords → sub-page URL suffix for click steps with no URL.
+# The recorder already falls back to _goto when a click fails + has a URL — this
+# ensures it always has one so it actually navigates instead of getting stuck.
+_SUBPAGE_URL_MAP = {
+    "review":        "/reviews/",
+    "trivia":        "/trivia/",
+    "goof":          "/goofs/",
+    "quote":         "/quotes/",
+    "parental":      "/parentalguide/",
+    "location":      "/locations/",
+    "full cast":     "/fullcredits/",
+    "full crew":     "/fullcredits/",
+    "award":         "/awards/",
+    "box office":    "/business/",
+    "budget":        "/business/",
+    "soundtrack":    "/soundtrack/",
+    "technical":     "/technical/",
+    "spec":          "/technical/",
+    "release":       "/releaseinfo/",
+    "alternate title": "/releaseinfo/#akas",
+    "aka":           "/releaseinfo/#akas",
+    "plot":          "/plotsummary/",
+    "connection":    "/movieconnections/",
+    "keyword":       "/keywords/",
+    "faq":           "/faq/",
+    "social":        "/externalsites/",
+    "official":      "/externalsites/",
+    "filming":       "/locations/",
+}
+
 _VERIFIED_TITLE_IDS = {
     "tt0133093", "tt0234215", "tt0242653", "tt1375666", "tt0468569",
     "tt0816692", "tt0068646", "tt0111161", "tt0110912", "tt0109830",
@@ -87,6 +120,11 @@ Rules for "steps":
 - "action":
   - "interaction_type": "search_query" when the step is a search, "click" when clicking a button/link, "navigate" when going to a direct URL
   - "target_element_id": for search_query put the SEARCH TERM, for click put the visible label text, for navigate use null
+- For search_query steps, target_element_id MUST be a real specific name (e.g. "The Matrix", "Tom Hanks") — NEVER a placeholder like "the movie title" or "the actor name"
+- For the first step of any search/lookup question, use a search_query step with a real example term
+- For click steps that open a sub-section of a title page (reviews, trivia, quotes, parental guide, awards, etc.) ALWAYS include the full URL from the sub-page patterns in the context — do NOT leave url empty
+- Bottom 100 / lowest-rated movies chart: https://www.imdb.com/chart/bottom/ (NOT /chart/top/)
+- IMDb Contribution Portal: https://contribute.imdb.com/ (for reporting errors or adding titles)
 
 Example — answer has 3 steps, steps array has exactly 3 entries:
 {
@@ -212,6 +250,18 @@ class QueryChain:
             "look up a show", "find a show",
             # Generic navigation questions that need general search instructions
             "how do i find a", "how do i look up", "how to find a", "how to look up",
+            # Generic search questions — graph only has specific paths, not "how to search"
+            "how do i search", "search for a movie", "search for a tv",
+            "find out what year", "what year a movie",
+            "date of birth of", "birthday of a", "celebrity born",
+            "filmography of", "career filmography", "sorted from first", "chronological",
+            # Charts the graph doesn't know
+            "bottom 100", "worst 100", "lowest rated movies", "lowest-rated movies",
+            # Contribution / reporting — no graph path
+            "report an error", "report error", "incorrect information", "wrong information",
+            "contribute", "suggest a new title", "add a new title", "submit a title",
+            # Social / follow features that don't exist on IMDb public pages
+            "follow other users", "follow user", "follow list",
         }
         q_lower = question.lower()
         if not graph_miss and any(kw in q_lower for kw in _FORCE_MISS_KEYWORDS):
@@ -303,6 +353,22 @@ class QueryChain:
                         r"\s*(movie page|tv show page|title page|series page)\s*$",
                         "", description, flags=re.IGNORECASE
                     ).strip()
+
+            # Correct Bottom 100 chart hallucination: LLM sometimes uses /chart/top/
+            # for questions about lowest-rated / worst movies
+            if url and "/chart/top/" in url:
+                desc_lower = description.lower()
+                if any(kw in desc_lower for kw in ("bottom", "worst", "lowest")):
+                    url = "https://www.imdb.com/chart/bottom/"
+
+            # For click steps that navigate to a title sub-page but have no URL,
+            # infer the URL from the description so the recorder can _goto as fallback
+            if itype == "click" and not url:
+                desc_lower = description.lower()
+                for kw, path_suffix in _SUBPAGE_URL_MAP.items():
+                    if kw in desc_lower:
+                        url = f"https://www.imdb.com/title/{_DEFAULT_EXAMPLE_ID}{path_suffix}"
+                        break
 
             steps.append({
                 "node_id": f"synthetic_{i}",
