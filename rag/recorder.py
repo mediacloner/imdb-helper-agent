@@ -126,7 +126,12 @@ async def _human_move(page: Page, x: float, y: float) -> None:
 
 
 async def _move_and_click(page: Page, locator, pause_ms: int = 500) -> None:
-    """Move the mouse humanly to a locator's center, pause, then click."""
+    """Scroll the element into view, move the mouse humanly to its center, pause, then click."""
+    try:
+        await locator.scroll_into_view_if_needed(timeout=2000)
+        await page.wait_for_timeout(300)
+    except Exception:
+        pass
     box = await locator.bounding_box()
     if box:
         tx = box["x"] + box["width"] / 2 + random.uniform(-3, 3)
@@ -421,14 +426,14 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
                     }, duration_ms=now_ms() - t0)
 
                 elif url:
-                    # "navigate" interaction type means go directly to the URL.
-                    # _navigate_via_menu uses only the path component and can match
-                    # the wrong link (e.g. /search/title/ matches podcast pages).
-                    # Only use menu navigation as a fallback for non-navigate steps.
-                    if interaction == "navigate" or "?" in url:
+                    if "?" in url:
+                        # Filter URLs with query params: navigate directly to preserve params
                         await _goto(page, url)
-                        method = "goto_filter" if "?" in url else "goto"
+                        method = "goto_filter"
                     else:
+                        # For all other navigations (including interaction_type=="navigate"),
+                        # try clicking the on-page link first so the video shows mouse movement.
+                        # Fall back to goto only when the link isn't found.
                         navigated = await _navigate_via_menu(page, url)
                         if not navigated:
                             await _goto(page, url)
@@ -448,6 +453,7 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
                         "method": "skipped_no_url_no_target", "success": False,
                     }, duration_ms=now_ms() - t0)
 
+            # Final pause — give the viewer time to see the last state
             await page.wait_for_timeout(2500)
             await context.close()
             await browser.close()
@@ -456,7 +462,23 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
         dest = None
         if video_files:
             dest = os.path.join(VIDEOS_DIR, f"{video_id}.webm")
-            shutil.move(os.path.join(video_dir, video_files[0]), dest)
+            raw = os.path.join(video_dir, video_files[0])
+            # Remux with ffmpeg to add seek index so browsers can scrub the timeline.
+            # Playwright WebM files are written without a Cues element (seek index),
+            # making the progress bar non-interactive in all browsers.
+            try:
+                import subprocess
+                tmp = dest + ".tmp.webm"
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", raw, "-c", "copy", tmp],
+                    capture_output=True, timeout=60,
+                )
+                if result.returncode == 0:
+                    os.replace(tmp, dest)
+                else:
+                    shutil.move(raw, dest)
+            except Exception:
+                shutil.move(raw, dest)
         return {"path": dest, "actual_steps": actual_steps}
 
     finally:

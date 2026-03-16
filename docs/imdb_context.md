@@ -139,12 +139,18 @@ Use the Advanced Title Search with filter parameters:
 - Italian-language movies: https://www.imdb.com/search/title/?languages=it&sort=year,desc
 - German-language movies: https://www.imdb.com/search/title/?languages=de&sort=year,desc
 - Japanese-language movies: https://www.imdb.com/search/title/?languages=ja&sort=year,desc
+- Hindi-language movies / Bollywood (highest rated): https://www.imdb.com/search/title/?languages=hi&sort=user_rating,desc
+- Korean-language movies (highest rated): https://www.imdb.com/search/title/?languages=ko&sort=user_rating,desc
+- Portuguese-language movies: https://www.imdb.com/search/title/?languages=pt&sort=year,desc
 - Movies from Spain (country): https://www.imdb.com/search/title/?country_of_origin=es&sort=year,desc
 - Movies from France: https://www.imdb.com/search/title/?country_of_origin=fr&sort=year,desc
+- Movies from India (Bollywood/Indian cinema): https://www.imdb.com/search/title/?country_of_origin=in&sort=user_rating,desc
 Language codes follow ISO 639-1. Country codes follow ISO 3166-1 alpha-2.
 
 IMPORTANT: There is NO URL like imdb.com/movies or imdb.com/genre/<language>.
 Always use imdb.com/search/title/ with query parameters for language/country filtering.
+For Bollywood / Indian Hindi films use: languages=hi (NOT a keyword search, NOT a find/ search).
+NEVER use find/?q= to search for a language or genre — it returns titles, not filtered lists.
 
 ## News and Events
 - Movie News: https://www.imdb.com/news/movie/
@@ -312,6 +318,20 @@ https://www.imdb.com/search/title/?genres=horror&country_of_origin=kr&sort=user_
 
 WWII documentaries:
 https://www.imdb.com/search/title/?genres=documentary&keywords=world-war-ii&sort=user_rating,desc
+
+Biographical films (biopics) about musicians / music artists:
+https://www.imdb.com/search/title/?genres=biography&keywords=musician&sort=user_rating,desc
+Also try: https://www.imdb.com/search/title/?genres=biography&keywords=music&sort=user_rating,desc
+Or more broadly (all biopics): https://www.imdb.com/search/title/?genres=biography&sort=user_rating,desc
+
+Movies with keyword "artificial intelligence":
+https://www.imdb.com/search/title/?keywords=artificial-intelligence&sort=user_rating,desc
+
+Horror movies from the 1980s:
+https://www.imdb.com/search/title/?genres=horror&release_date=1980-01-01,1989-12-31&sort=user_rating,desc
+
+War movies sorted by rating:
+https://www.imdb.com/search/title/?genres=war&sort=user_rating,desc&num_votes=1000,
 
 Stephen King film adaptations:
 https://www.imdb.com/search/title/?keywords=stephen-king&title_type=feature&sort=user_rating,desc

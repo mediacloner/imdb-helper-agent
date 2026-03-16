@@ -184,20 +184,26 @@ class QueryChain:
             if intent_words and not any(w in last_desc for w in intent_words):
                 graph_miss = True
 
-        # Miss if any step description references a specific title/person that wasn't in the question
-        # (e.g. path lands on Inception pages when the user asked a generic question)
+        # Miss if the question asks about a SPECIFIC title/person but the path goes through a
+        # DIFFERENT one (e.g. user asks about Titanic but graph returns an Inception path).
+        # For generic "how do I find X" questions with no specific title, allow paths through
+        # known titles — they demonstrate the navigation pattern as a valid example.
         if not graph_miss and steps:
             q_lower = question.lower()
             _SPECIFIC_TITLES = ["inception", "the matrix", "dark knight", "godfather", "shawshank",
                                  "breaking bad", "game of thrones", "frasier", "tt1375666", "tt0133093"]
-            for title in _SPECIFIC_TITLES:
-                if title not in q_lower:
-                    for step in steps:
-                        if title in step.get("description", "").lower() or title in step.get("url", "").lower():
-                            graph_miss = True
-                            break
-                if graph_miss:
-                    break
+            q_has_specific_title = any(t in q_lower for t in _SPECIFIC_TITLES)
+            if q_has_specific_title:
+                # User named a specific title — path must not go through a different known title
+                for title in _SPECIFIC_TITLES:
+                    if title not in q_lower:
+                        for step in steps:
+                            if title in step.get("description", "").lower() or title in step.get("url", "").lower():
+                                graph_miss = True
+                                break
+                    if graph_miss:
+                        break
+            # else: generic question — a path through Inception/Matrix is a valid example, keep it
 
         # Force miss for queries the graph cannot answer — language/country, advanced filters,
         # franchise/collection, cross-award, multi-actor co-appearance, show-specific episode rankings,

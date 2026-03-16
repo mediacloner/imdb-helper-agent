@@ -3,9 +3,19 @@ import Chat from './components/Chat.jsx';
 import TestRunner from './components/TestRunner.jsx';
 
 export default function App() {
-  const [view, setView] = useState('chat'); // 'chat' | 'tests'
+  const [view, setView] = useState(() =>
+    window.location.hash === '#tests' ? 'tests' : 'chat'
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onHash() {
+      setView(window.location.hash === '#tests' ? 'tests' : 'chat');
+    }
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   useEffect(() => {
     function handle(e) {
@@ -16,6 +26,7 @@ export default function App() {
   }, []);
 
   const navigate = (target) => {
+    window.location.hash = target === 'tests' ? '#tests' : '';
     setView(target);
     setMenuOpen(false);
   };
@@ -51,6 +62,19 @@ export default function App() {
 
               <div
                 style={styles.dropItem}
+                onClick={() => navigate('chat')}
+                onMouseEnter={e => e.currentTarget.style.background = '#1e2235'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={styles.dropIcon}>💬</span>
+                <div>
+                  <div style={styles.dropLabel}>Chat</div>
+                  <div style={styles.dropDesc}>Ask how to navigate IMDB</div>
+                </div>
+              </div>
+
+              <div
+                style={styles.dropItem}
                 onClick={() => navigate('tests')}
                 onMouseEnter={e => e.currentTarget.style.background = '#1e2235'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -81,24 +105,6 @@ export default function App() {
           )}
         </div>
       </header>
-
-      {/* Nav tabs */}
-      {view === 'tests' && (
-        <div style={styles.tabs}>
-          <button
-            style={{ ...styles.tab, ...(view === 'chat' ? styles.tabActive : {}) }}
-            onClick={() => navigate('chat')}
-          >
-            💬 Chat
-          </button>
-          <button
-            style={{ ...styles.tab, ...(view === 'tests' ? styles.tabActive : {}) }}
-            onClick={() => navigate('tests')}
-          >
-            🧪 Tests
-          </button>
-        </div>
-      )}
 
       <main style={styles.main}>
         {view === 'chat' ? <Chat /> : <TestRunner />}
@@ -164,28 +170,6 @@ const styles = {
     boxSizing: 'border-box',
     minHeight: '0',
   },
-  tabs: {
-    display: 'flex',
-    gap: '0',
-    borderBottom: '1px solid #2a2e42',
-    backgroundColor: '#0d1017',
-    padding: '0 24px',
-  },
-  tab: {
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    color: '#8b92a5',
-    padding: '10px 16px',
-    fontSize: '13px',
-    cursor: 'pointer',
-    marginBottom: '-1px',
-  },
-  tabActive: {
-    color: '#f5c518',
-    borderBottomColor: '#f5c518',
-  },
-
   /* Hamburger button */
   menuWrap: {
     marginLeft: 'auto',

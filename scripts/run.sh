@@ -8,14 +8,15 @@ show_menu() {
     echo " 2) Crawl - Large    ( 60 pages, ~10 min)"
     echo " 3) Crawl - Full     (100 pages, ~18 min)  <- all key pages"
     echo " 4) Crawl - Deep     (150 pages, ~25 min)  <- all key pages + BFS"
-    echo " 5) Save graph to database (Neo4j import)"
-    echo " 6) Production stack (Neo4j + RAG + Interface)"
-    echo " 7) Database only   (Neo4j)"
-    echo " 8) Stop all containers"
-    echo " 9) Restart production"
+    echo " 5) Crawl - Extreme  (200 pages, ~35 min)  <- maximum coverage"
+    echo " 6) Save graph to database (Neo4j import)"
+    echo " 7) Production stack (Neo4j + RAG + Interface)"
+    echo " 8) Database only   (Neo4j)"
+    echo " 9) Stop all containers"
+    echo " r) Restart production"
     echo " 0) Exit"
     echo "================================================="
-    echo -n "Enter choice [0-9]: "
+    echo -n "Enter choice [0-9/r]: "
     read -n 1 choice
     echo
 }
@@ -26,7 +27,7 @@ run_crawler() {
     MAX_PAGES=$max_pages docker compose --profile scrape up --build
     echo ""
     echo "Crawl complete. Output: crawler/output/graph.json"
-    echo "Run option 5 to import the graph into Neo4j."
+    echo "Run option 6 to import the graph into Neo4j."
 }
 
 while true; do
@@ -45,6 +46,9 @@ while true; do
         run_crawler 150
 
     elif [ "$choice" == "5" ]; then
+        run_crawler 200
+
+    elif [ "$choice" == "6" ]; then
         echo "Importing graph into Neo4j..."
         echo "Starting Neo4j..."
         docker compose --profile production up -d neo4j
@@ -62,7 +66,7 @@ while true; do
         echo "Import complete."
         echo "Neo4j browser: http://localhost:7474"
 
-    elif [ "$choice" == "6" ]; then
+    elif [ "$choice" == "7" ]; then
         echo "Starting Production Profile..."
         docker compose --profile production up --build -d
         echo "Production services are spinning up in the background."
@@ -72,19 +76,19 @@ while true; do
         echo "Interface: http://localhost:3000"
         echo "Ollama:    http://localhost:11434  (local)"
 
-    elif [ "$choice" == "7" ]; then
+    elif [ "$choice" == "8" ]; then
         echo "Starting Neo4j..."
         docker compose --profile production up -d neo4j
         echo ""
         echo "Neo4j browser: http://localhost:7474"
         echo "Bolt:          bolt://localhost:7687  (neo4j/password)"
 
-    elif [ "$choice" == "8" ]; then
+    elif [ "$choice" == "9" ]; then
         echo "Stopping all containers..."
         docker compose --profile production --profile scrape --profile import down
         echo "All containers stopped."
 
-    elif [ "$choice" == "9" ]; then
+    elif [ "$choice" == "r" ]; then
         echo "Restarting production..."
         docker compose --profile production down
         docker compose --profile production up --build -d

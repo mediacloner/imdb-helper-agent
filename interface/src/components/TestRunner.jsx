@@ -205,6 +205,8 @@ function LiveLog({ recent }) {
   );
 }
 
+const ACTIVE_RUN_KEY = 'imdb_active_run_id';
+
 export default function TestRunner() {
   const [category, setCategory] = useState('');
   const [difficulty, setDifficulty] = useState('');
@@ -228,8 +230,6 @@ export default function TestRunner() {
     } catch (_) {}
   }, []);
 
-  useEffect(() => { loadRuns(); }, [loadRuns]);
-
   const startPolling = useCallback((runId) => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
@@ -242,12 +242,34 @@ export default function TestRunner() {
           clearInterval(pollRef.current);
           pollRef.current = null;
           setRunning(false);
+          localStorage.removeItem(ACTIVE_RUN_KEY);
           loadRuns();
           if (data.status === 'done') selectRun(runId);
         }
       } catch (_) {}
     }, 1500);
   }, [loadRuns]);
+
+  // On mount: restore any in-progress run from localStorage so closing/reopening
+  // the browser tab doesn't lose the live progress view.
+  useEffect(() => {
+    loadRuns();
+    const savedRunId = localStorage.getItem(ACTIVE_RUN_KEY);
+    if (!savedRunId) return;
+    fetch(`${API}/tests/status/${savedRunId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) { localStorage.removeItem(ACTIVE_RUN_KEY); return; }
+        setCurrentRun(data);
+        if (data.status === 'running') {
+          setRunning(true);
+          startPolling(savedRunId);
+        } else {
+          localStorage.removeItem(ACTIVE_RUN_KEY);
+        }
+      })
+      .catch(() => localStorage.removeItem(ACTIVE_RUN_KEY));
+  }, []);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
@@ -277,6 +299,7 @@ export default function TestRunner() {
       }
       const { run_id, total } = await res.json();
       setCurrentRun({ run_id, total, completed: 0, status: 'running', recent: [] });
+      localStorage.setItem(ACTIVE_RUN_KEY, run_id);
       startPolling(run_id);
     } catch (e) {
       alert(`Failed to start run: ${e.message}`);
@@ -290,6 +313,7 @@ export default function TestRunner() {
       await fetch(`${API}/tests/stop/${currentRun.run_id}`, { method: 'POST' });
       setRunning(false);
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      localStorage.removeItem(ACTIVE_RUN_KEY);
       setCurrentRun(prev => ({ ...prev, status: 'stopped' }));
       loadRuns();
     } catch (e) {

@@ -40,10 +40,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _graph_client = GraphClient()
     _query_chain = QueryChain(_vector_store, _graph_client)
 
-    # Auto-ingest the IMDb context document so the LLM always has site knowledge
+    # Auto-ingest the IMDb context document so the LLM always has site knowledge.
+    # Delete and re-insert all chunks for this file so stale chunks from previous
+    # versions of the document don't linger (IDs are positional, so adding/removing
+    # lines would otherwise leave orphaned embeddings).
     context_path = "/docs/imdb_context.md"
     if os.path.exists(context_path):
         try:
+            try:
+                existing_ids = _vector_store._collection.get(
+                    where={"filename": "imdb_context.md"}, include=[]
+                ).get("ids", [])
+                if existing_ids:
+                    _vector_store._collection.delete(ids=existing_ids)
+            except Exception:
+                pass  # collection may be empty — ignore
             _vector_store.ingest_file(context_path, "imdb_context.md")
         except Exception as e:
             print(f"Warning: could not ingest IMDb context: {e}")

@@ -121,9 +121,33 @@ async function dismissCookieBanner(page) {
  * @returns {Promise<string[]>} Deduplicated list of absolute URLs on the same domain.
  */
 async function extractSameDomainLinks(page, baseDomain) {
-  const hrefs = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('a[href]')).map((a) => a.href)
-  );
+  const hrefs = await page.evaluate(() => {
+    const urls = [];
+
+    // Standard anchor links
+    for (const a of document.querySelectorAll('a[href]')) {
+      urls.push(a.href);
+    }
+
+    // Form actions — captures /search/title/ and /find/ submission targets
+    for (const form of document.querySelectorAll('form[action]')) {
+      try {
+        const action = new URL(form.action, location.href);
+        // Only plain GET forms whose action is a same-domain path
+        if ((!form.method || form.method.toLowerCase() === 'get') && action.hostname === location.hostname) {
+          urls.push(action.href.split('?')[0]); // path only; params come from selects below
+        }
+      } catch { /* ignore malformed */ }
+    }
+
+    // Elements with data-href or data-url attributes (some IMDB widgets use these)
+    for (const el of document.querySelectorAll('[data-href], [data-url]')) {
+      const val = el.getAttribute('data-href') || el.getAttribute('data-url') || '';
+      if (val.startsWith('/') || val.startsWith('http')) urls.push(val);
+    }
+
+    return urls;
+  });
 
   const unique = new Set();
   for (const href of hrefs) {
@@ -328,16 +352,37 @@ const IMDB_SEED_PAGES = [
   'https://www.imdb.com/search/title/?title_type=feature',
   'https://www.imdb.com/search/title/?title_type=short',
   'https://www.imdb.com/search/title/?title_type=tv_movie',
+  'https://www.imdb.com/search/title/?title_type=mini_series',
+  // Genre filters
   'https://www.imdb.com/search/title/?genres=horror',
+  'https://www.imdb.com/search/title/?genres=horror&release_date=1980,1989&sort=user_rating,desc',
   'https://www.imdb.com/search/title/?genres=comedy',
   'https://www.imdb.com/search/title/?genres=documentary',
   'https://www.imdb.com/search/title/?genres=animation',
+  'https://www.imdb.com/search/title/?genres=war&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?genres=biography&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?genres=biography&keywords=musician&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?genres=crime&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?genres=sci-fi&sort=user_rating,desc',
+  // Language filters — key world cinema languages
   'https://www.imdb.com/search/title/?languages=es&sort=year,desc',
   'https://www.imdb.com/search/title/?languages=fr&sort=year,desc',
   'https://www.imdb.com/search/title/?languages=it&sort=year,desc',
   'https://www.imdb.com/search/title/?languages=ja&sort=year,desc',
-  'https://www.imdb.com/search/title/?user_rating=8.0,10&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?languages=hi&sort=user_rating,desc',   // Hindi / Bollywood
+  'https://www.imdb.com/search/title/?languages=ko&sort=user_rating,desc',   // Korean
+  'https://www.imdb.com/search/title/?languages=de&sort=year,desc',          // German
+  // Keyword / topic searches
+  'https://www.imdb.com/search/title/?keywords=artificial-intelligence&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?keywords=based-on-novel&sort=user_rating,desc',
   'https://www.imdb.com/search/title/?keywords=stephen-king',
+  // Rating and decade combos
+  'https://www.imdb.com/search/title/?user_rating=8.0,10&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?release_date=2020,2025&sort=user_rating,desc',
+  // Black-and-white filter
+  'https://www.imdb.com/search/title/?colors=black_and_white&sort=user_rating,desc',
+  // Multi-person co-appearance pattern
+  'https://www.imdb.com/search/title/?role=nm0000206&role=nm0000158',
   'https://www.imdb.com/search/name/',
   'https://www.imdb.com/interest/all/',
 
@@ -447,8 +492,13 @@ export async function crawl(startUrl, maxPages = 10) {
       await dismissCookieBanner(page);
 
       const slug = urlToSlug(url);
-      const nodeId = `state_${slug}_${pageIndex}`;
-      urlToNodeId.set(url, nodeId);
+      // Preserve any pre-assigned ID so edges that already reference this URL
+      // continue to point to the correct node.  Only assign a new ID if this
+      // URL was never seen as a link target before visiting it.
+      if (!urlToNodeId.has(url)) {
+        urlToNodeId.set(url, `state_${slug}_${pageIndex}`);
+      }
+      const nodeId = urlToNodeId.get(url);
 
       let node;
       try {
@@ -471,11 +521,13 @@ export async function crawl(startUrl, maxPages = 10) {
       }
 
       for (const link of links) {
-        // Pre-assign node IDs for targets we haven't visited yet so edges are consistent
+        // Pre-assign a stable node ID for targets not yet visited.
+        // Use a sequential counter so the ID is deterministic and won't conflict
+        // with any future pageIndex-based ID (both share the slug prefix but the
+        // counter uses a "p" prefix to distinguish them).
         if (!urlToNodeId.has(link)) {
           const targetSlug = urlToSlug(link);
-          const targetIndex = visited.size + queue.indexOf(link);
-          urlToNodeId.set(link, `state_${targetSlug}_${targetIndex}`);
+          urlToNodeId.set(link, `state_${targetSlug}_p${urlToNodeId.size}`);
         }
 
         // Enqueue unvisited BFS links.
