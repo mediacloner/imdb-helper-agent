@@ -211,6 +211,22 @@ async function discoverNavEntryPoints(page, baseDomain) {
  * @param {number} [maxPages=10] - Maximum number of pages to visit.
  * @returns {Promise<{ nodes: Object[], edges: Object[] }>}
  */
+// Known title IDs that are safe to crawl and include in the graph.
+// BFS-discovered pages for any OTHER title are skipped to prevent the graph
+// from being flooded with hundreds of random upcoming-movie pages.
+const KNOWN_TITLE_IDS = new Set([
+  // Movies
+  'tt1375666', 'tt0133093', 'tt0234215', 'tt0242653', 'tt0468569',
+  'tt0816692', 'tt0068646', 'tt0111161', 'tt0110912', 'tt0109830',
+  'tt4154796', 'tt0499549', 'tt0120338', 'tt0099685', 'tt0137523',
+  'tt0102926', 'tt0108052', 'tt0088247', 'tt0103064', 'tt0078748',
+  'tt0090605', 'tt0107290', 'tt0076759', 'tt0110357', 'tt0088763',
+  // TV shows
+  'tt0098904', 'tt0903747', 'tt0944947', 'tt0108778', 'tt0141842',
+  'tt4574334', 'tt0386676', 'tt0306414', 'tt0106004', 'tt0096697',
+  'tt0106179', 'tt0411008', 'tt0412142', 'tt4786824', 'tt7660850',
+]);
+
 // Key IMDB page types that users commonly ask about.
 // These are seeded directly so the graph covers important states
 // regardless of which links BFS happens to follow first.
@@ -219,60 +235,110 @@ const IMDB_SEED_PAGES = [
   'https://www.imdb.com',
   'https://www.imdb.com/find/?q=inception&s=tt',
 
-  // ── Movie pages ────────────────────────────────────────────────────
-  'https://www.imdb.com/title/tt1375666/',                   // Inception
-  'https://www.imdb.com/title/tt1375666/fullcredits',        // Inception cast
-  'https://www.imdb.com/title/tt1375666/reviews',            // Inception reviews
-  'https://www.imdb.com/title/tt1375666/trivia',             // Inception trivia
-  'https://www.imdb.com/title/tt1375666/awards',             // Inception awards
-  'https://www.imdb.com/title/tt1375666/technical',          // Inception technical specs
-  'https://www.imdb.com/title/tt1375666/releaseinfo',        // Inception release dates
-  'https://www.imdb.com/title/tt1375666/parentalguide',      // Inception parental guide
-  'https://www.imdb.com/title/tt1375666/soundtrack',         // Inception soundtrack
-  'https://www.imdb.com/title/tt1375666/plotsummary',        // Inception plot summaries
-  'https://www.imdb.com/title/tt1375666/companycredits',     // Inception company credits
-  'https://www.imdb.com/title/tt0133093/',                   // The Matrix
-  'https://www.imdb.com/title/tt0133093/fullcredits',        // Matrix cast
-  'https://www.imdb.com/title/tt0468569/',                   // The Dark Knight
-  'https://www.imdb.com/title/tt0068646/',                   // The Godfather
-  'https://www.imdb.com/title/tt0111161/',                   // The Shawshank Redemption
+  // ── Inception (full sub-page coverage) ────────────────────────────
+  'https://www.imdb.com/title/tt1375666/',
+  'https://www.imdb.com/title/tt1375666/fullcredits',
+  'https://www.imdb.com/title/tt1375666/reviews',
+  'https://www.imdb.com/title/tt1375666/trivia',
+  'https://www.imdb.com/title/tt1375666/goofs',
+  'https://www.imdb.com/title/tt1375666/quotes',
+  'https://www.imdb.com/title/tt1375666/awards',
+  'https://www.imdb.com/title/tt1375666/technical',
+  'https://www.imdb.com/title/tt1375666/releaseinfo',
+  'https://www.imdb.com/title/tt1375666/parentalguide',
+  'https://www.imdb.com/title/tt1375666/soundtrack',
+  'https://www.imdb.com/title/tt1375666/plotsummary',
+  'https://www.imdb.com/title/tt1375666/companycredits',
+  'https://www.imdb.com/title/tt1375666/locations',
+  'https://www.imdb.com/title/tt1375666/business',
+  'https://www.imdb.com/title/tt1375666/faq',
+  'https://www.imdb.com/title/tt1375666/keywords',
+  'https://www.imdb.com/title/tt1375666/movieconnections',
+
+  // ── The Matrix ────────────────────────────────────────────────────
+  'https://www.imdb.com/title/tt0133093/',
+  'https://www.imdb.com/title/tt0133093/fullcredits',
+  'https://www.imdb.com/title/tt0133093/reviews',
+  'https://www.imdb.com/title/tt0133093/trivia',
+  'https://www.imdb.com/title/tt0133093/awards',
+
+  // ── The Dark Knight ───────────────────────────────────────────────
+  'https://www.imdb.com/title/tt0468569/',
+  'https://www.imdb.com/title/tt0468569/fullcredits',
+  'https://www.imdb.com/title/tt0468569/reviews',
+  'https://www.imdb.com/title/tt0468569/awards',
+
+  // ── The Godfather ─────────────────────────────────────────────────
+  'https://www.imdb.com/title/tt0068646/',
+  'https://www.imdb.com/title/tt0068646/fullcredits',
+  'https://www.imdb.com/title/tt0068646/awards',
+
+  // ── The Shawshank Redemption ──────────────────────────────────────
+  'https://www.imdb.com/title/tt0111161/',
+  'https://www.imdb.com/title/tt0111161/reviews',
+  'https://www.imdb.com/title/tt0111161/awards',
 
   // ── TV show pages ──────────────────────────────────────────────────
-  'https://www.imdb.com/title/tt0106004/',                   // Frasier
-  'https://www.imdb.com/title/tt0106004/episodes/?season=1', // Frasier S1
-  'https://www.imdb.com/title/tt0106004/episodes/?season=2', // Frasier S2
-  'https://www.imdb.com/title/tt0106004/fullcredits',        // Frasier cast
   'https://www.imdb.com/title/tt0903747/',                   // Breaking Bad
-  'https://www.imdb.com/title/tt0903747/episodes/?season=1', // Breaking Bad S1
-  'https://www.imdb.com/title/tt0903747/fullcredits',        // Breaking Bad cast
+  'https://www.imdb.com/title/tt0903747/episodes/?season=1',
+  'https://www.imdb.com/title/tt0903747/episodes/?season=2',
+  'https://www.imdb.com/title/tt0903747/fullcredits',
+  'https://www.imdb.com/title/tt0903747/reviews',
+  'https://www.imdb.com/title/tt0903747/awards',
   'https://www.imdb.com/title/tt0944947/',                   // Game of Thrones
-  'https://www.imdb.com/title/tt0944947/episodes/?season=1', // GoT S1
+  'https://www.imdb.com/title/tt0944947/episodes/?season=1',
+  'https://www.imdb.com/title/tt0944947/fullcredits',
   'https://www.imdb.com/title/tt0098904/',                   // Seinfeld
-  'https://www.imdb.com/title/tt0098904/episodes/?season=1', // Seinfeld S1
+  'https://www.imdb.com/title/tt0098904/episodes/?season=1',
   'https://www.imdb.com/title/tt0108778/',                   // Friends
-  'https://www.imdb.com/title/tt0108778/episodes/?season=1', // Friends S1
+  'https://www.imdb.com/title/tt0108778/episodes/?season=1',
   'https://www.imdb.com/title/tt4574334/',                   // Stranger Things
-  'https://www.imdb.com/title/tt4574334/episodes/?season=1', // Stranger Things S1
+  'https://www.imdb.com/title/tt4574334/episodes/?season=1',
+  'https://www.imdb.com/title/tt0141842/',                   // The Sopranos
+  'https://www.imdb.com/title/tt0141842/episodes/?season=1',
+  'https://www.imdb.com/title/tt0306414/',                   // The Wire
+  'https://www.imdb.com/title/tt0106004/',                   // Frasier
+  'https://www.imdb.com/title/tt0106004/episodes/?season=1',
 
   // ── Person pages ───────────────────────────────────────────────────
   'https://www.imdb.com/name/nm0000206/',                    // Keanu Reeves
-  'https://www.imdb.com/name/nm0000206/bio',                 // Keanu Reeves bio
+  'https://www.imdb.com/name/nm0000206/bio',
+  'https://www.imdb.com/name/nm0000206/awards',
   'https://www.imdb.com/name/nm0000138/',                    // Leonardo DiCaprio
+  'https://www.imdb.com/name/nm0000138/bio',
+  'https://www.imdb.com/name/nm0000138/awards',
   'https://www.imdb.com/name/nm0634240/',                    // Christopher Nolan
-  'https://www.imdb.com/search/name/?birth_monthday=06-11', // Name search (browse)
+  'https://www.imdb.com/name/nm0634240/awards',
+  'https://www.imdb.com/name/nm0000158/',                    // Tom Hanks
+  'https://www.imdb.com/name/nm0000158/bio',
+  'https://www.imdb.com/name/nm0000093/',                    // Brad Pitt
+  'https://www.imdb.com/name/nm0000093/awards',
 
   // ── Charts ─────────────────────────────────────────────────────────
   'https://www.imdb.com/chart/top/',
+  'https://www.imdb.com/chart/bottom/',                      // Bottom 100
   'https://www.imdb.com/chart/toptv/',
   'https://www.imdb.com/chart/moviemeter/',
   'https://www.imdb.com/chart/tvmeter/',
   'https://www.imdb.com/chart/boxoffice/',
   'https://www.imdb.com/chart/starmeter/',
 
-  // ── Browse & language search ───────────────────────────────────────
+  // ── Advanced search / filter pages ────────────────────────────────
   'https://www.imdb.com/search/title/',
+  'https://www.imdb.com/search/title/?title_type=feature',
+  'https://www.imdb.com/search/title/?title_type=short',
+  'https://www.imdb.com/search/title/?title_type=tv_movie',
+  'https://www.imdb.com/search/title/?genres=horror',
+  'https://www.imdb.com/search/title/?genres=comedy',
+  'https://www.imdb.com/search/title/?genres=documentary',
+  'https://www.imdb.com/search/title/?genres=animation',
   'https://www.imdb.com/search/title/?languages=es&sort=year,desc',
   'https://www.imdb.com/search/title/?languages=fr&sort=year,desc',
+  'https://www.imdb.com/search/title/?languages=it&sort=year,desc',
+  'https://www.imdb.com/search/title/?languages=ja&sort=year,desc',
+  'https://www.imdb.com/search/title/?user_rating=8.0,10&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?keywords=stephen-king',
+  'https://www.imdb.com/search/name/',
   'https://www.imdb.com/interest/all/',
 
   // ── News, Calendar, Awards ─────────────────────────────────────────
@@ -329,22 +395,12 @@ export async function crawl(startUrl, maxPages = 10) {
   // Phase 0: discover entry points from the site's own nav and footer.
   // These go at the front of the queue so structurally unique sections
   // found by IMDB itself are visited before generic BFS exploration.
+  // NOTE: We do NOT capture the homepage node here — BFS will visit it from
+  // IMDB_SEED_PAGES and build edges from it normally. Capturing it in Phase 0
+  // would create a node with no outgoing edges since edge-building only happens
+  // inside the BFS loop.
   console.log('[crawler] Phase 0: discovering nav/footer entry points…');
   const navEntryPoints = await discoverNavEntryPoints(page, baseDomain);
-  // The homepage was already navigated during discovery — extract its state now
-  // so BFS doesn't waste a slot re-fetching it.
-  try {
-    const homeNodeId = 'state_home_0';
-    const homeNode = await extractState(page, homeNodeId);
-    nodes.push(homeNode);
-    urlToNodeId.set(`https://${baseDomain}`, homeNodeId);
-    visited.add(`https://${baseDomain}`);
-    visited.add(`https://${baseDomain}/`);
-    pageIndex++;
-    console.log(`[crawler] Captured homepage node with ${homeNode.available_elements.length} elements`);
-  } catch (e) {
-    console.warn(`[crawler] Could not capture homepage state after discovery: ${e.message}`);
-  }
 
   // Merge: nav/footer discoveries first, then hardcoded seeds, then startUrl
   const seedSet = new Set([
@@ -428,6 +484,11 @@ export async function crawl(startUrl, maxPages = 10) {
         // - Already-seen types are capped at MAX_BFS_PAGES_PER_TYPE and respect maxPages.
         if (!visited.has(link) && !queue.includes(link)) {
           const linkType = getPageType(link);
+          // Skip BFS-discovered pages for unknown movie/TV titles — they flood the
+          // graph with hundreds of upcoming-movie pages that provide no navigation
+          // signal. Only title pages for IDs in KNOWN_TITLE_IDS are allowed.
+          const linkTtMatch = link.match(/\/title\/(tt\d+)/);
+          if (linkTtMatch && !KNOWN_TITLE_IDS.has(linkTtMatch[1])) continue;
           const typeCount = bfsTypeCount.get(linkType) || 0;
           const typeUnseen = !visitedTypes.has(linkType);
           if (typeUnseen || (typeCount < MAX_BFS_PAGES_PER_TYPE && pageIndex + queue.length < maxPages)) {
@@ -497,7 +558,11 @@ export async function crawl(startUrl, maxPages = 10) {
             source_node: nodeId,
             target_node: searchTargetId,
             interaction_type: 'search_query',
-            target_element_id: searchEl ? (searchEl.css_selector || '#suggestion-search') : '#suggestion-search',
+            // Use the human-readable aria-label if found; fall back to null.
+          // '#suggestion-search' is an internal CSS selector — it doesn't belong
+          // here as a target_element_id since that field should be a human-readable
+          // label (or null) so the recorder and LLM can understand it.
+          target_element_id: searchEl ? (searchEl.aria_label || searchEl.text || null) : null,
           });
         }
       }

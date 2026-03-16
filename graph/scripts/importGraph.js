@@ -67,6 +67,72 @@ async function importNodes(session) {
   return totalImported;
 }
 
+// Critical edges that must always exist regardless of what the crawler produced.
+// These connect key navigation landmarks (homepage → charts, Inception → sub-pages)
+// and are idempotently re-injected after every import using MERGE.
+const CRITICAL_EDGES = [
+  // ── Home → utility pages ─────────────────────────────────────────────────
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/top/',              type: 'click',        label: 'Top 250 Movies' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/bottom/',           type: 'click',        label: 'Bottom 100 Movies' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/boxoffice/',        type: 'click',        label: 'Box Office' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/moviemeter/',       type: 'click',        label: 'Most Popular Movies' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/toptv/',            type: 'click',        label: 'Top 250 TV Shows' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/chart/starmeter/',        type: 'click',        label: 'STARmeter' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/calendar',                type: 'click',        label: 'Release Calendar' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/awards-central/',         type: 'click',        label: 'Awards Central' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/oscars/',                 type: 'click',        label: 'Oscars' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/news/movie/',             type: 'click',        label: 'Movie News' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/search/title/',           type: 'click',        label: 'Advanced Search' },
+  { src: 'https://www.imdb.com',                    tgt: 'https://www.imdb.com/find/',                   type: 'search_query', label: null },
+  // ── Inception → sub-pages ─────────────────────────────────────────────────
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/reviews',        type: 'click', label: 'User Reviews' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/trivia',         type: 'click', label: 'Trivia' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/goofs',          type: 'click', label: 'Goofs' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/quotes',         type: 'click', label: 'Quotes' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/awards',         type: 'click', label: 'Awards' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/fullcredits',    type: 'click', label: 'Full Cast & Crew' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/parentalguide', type: 'click', label: 'Parents Guide' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/technical',     type: 'click', label: 'Technical Specs' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/releaseinfo',   type: 'click', label: 'Release Dates' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/soundtrack',    type: 'click', label: 'Soundtrack' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/plotsummary',   type: 'click', label: 'Plot Summary' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/companycredits',type: 'click', label: 'Company Credits' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/locations',     type: 'click', label: 'Filming Locations' },
+  { src: 'https://www.imdb.com/title/tt1375666/',   tgt: 'https://www.imdb.com/title/tt1375666/keywords',      type: 'click', label: 'Keywords' },
+];
+
+async function injectCriticalEdges(session) {
+  console.log('\nInjecting critical edges…');
+  let injected = 0;
+
+  for (const edge of CRITICAL_EDGES) {
+    // Match nodes by URL with or without trailing slash
+    const result = await session.run(
+      `
+      MATCH (src:UIState)
+        WHERE src.url = $src OR src.url = $src + '/' OR src.url = $src_slash OR src.url = $src_slash + '/'
+      MATCH (tgt:UIState)
+        WHERE tgt.url = $tgt OR tgt.url = $tgt + '/' OR tgt.url = $tgt_slash OR tgt.url = $tgt_slash + '/'
+      MERGE (src)-[r:NAVIGATES_TO { edge_id: $edge_id }]->(tgt)
+      ON CREATE SET r.interaction_type = $itype, r.target_element_id = $label
+      RETURN count(r) AS cnt
+      `,
+      {
+        src:       edge.src.replace(/\/$/, ''),
+        src_slash: edge.src.replace(/\/$/, '') + '/',
+        tgt:       edge.tgt.replace(/\/$/, ''),
+        tgt_slash: edge.tgt.replace(/\/$/, '') + '/',
+        edge_id:   `critical_${Buffer.from(edge.src + '→' + edge.tgt).toString('base64').slice(0, 24)}`,
+        itype:     edge.type,
+        label:     edge.label ?? null,
+      }
+    );
+    injected += result.records[0]?.get('cnt').toNumber() ?? 0;
+  }
+
+  console.log(`  Critical edges: ${injected} created / ${CRITICAL_EDGES.length} total`);
+}
+
 async function importEdges(session) {
   const batches = chunk(edges, BATCH_SIZE);
   let totalImported = 0;
@@ -117,6 +183,8 @@ try {
 
   console.log('\nImporting edges...');
   const edgeCount = await importEdges(session);
+
+  await injectCriticalEdges(session);
 
   console.log(`\nImport complete. Nodes: ${nodeCount}, Edges: ${edgeCount}`);
 } catch (err) {

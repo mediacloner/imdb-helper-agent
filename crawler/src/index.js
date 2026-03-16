@@ -10,7 +10,7 @@ import path from 'path';
 import { crawl } from './crawler.js';
 
 const START_URL = process.env.START_URL || 'https://www.imdb.com';
-const MAX_PAGES = parseInt(process.env.MAX_PAGES || '100', 10);
+const MAX_PAGES = parseInt(process.env.MAX_PAGES || '200', 10);
 const OUTPUT_PATH = '/app/output/graph.json';
 const REPORT_PATH = '/app/output/report.md';
 
