@@ -46,7 +46,9 @@ class GraphClient:
             end_desc=end_description,
         )
 
-        # Fallback: find any shortest path to any matching destination node
+        # Fallback: find shortest path from a known useful start node (homepage or
+        # Inception) to the destination — prevents paths starting from random
+        # upcoming-movie pages that produce useless navigation sequences
         if not records:
             query = """
             MATCH (end:UIState)
@@ -55,8 +57,12 @@ class GraphClient:
             WITH collect(end) AS ends
             UNWIND ends AS end
             MATCH (start:UIState)
-            WHERE start <> end
-            MATCH path = shortestPath((start)-[:NAVIGATES_TO*1..20]->(end))
+            WHERE start.url IN [
+                "https://www.imdb.com/",
+                "https://www.imdb.com/title/tt1375666",
+                "https://www.imdb.com/find/?q=inception&s=tt"
+            ] AND start <> end
+            MATCH path = shortestPath((start)-[:NAVIGATES_TO*1..10]->(end))
             WITH nodes(path) AS path_nodes, relationships(path) AS path_rels, length(path) AS len
             ORDER BY len ASC LIMIT 1
             UNWIND range(0, size(path_nodes) - 1) AS idx
