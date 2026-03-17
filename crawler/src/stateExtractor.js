@@ -128,6 +128,62 @@ export async function extractState(page, nodeId) {
 
   const elements = await page.evaluate(
     ({ selectors, maxElements, maxTextLength }) => {
+      // ── React fiber: walk up to find the nearest meaningful component name ──
+      function getReactComponentName(el) {
+        try {
+          const fiberKey = Object.keys(el).find(
+            k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance')
+          );
+          if (!fiberKey) return null;
+          let fiber = el[fiberKey];
+          for (let depth = 0; depth < 15 && fiber; depth++) {
+            const type = fiber.type;
+            if (type && typeof type === 'function') {
+              const name = type.displayName || type.name;
+              // Skip React internals and single-letter wrappers
+              if (
+                name && name.length > 2 &&
+                !/^(t\d|_|Memo|ForwardRef|Fragment|Provider|Consumer|Suspense|StrictMode|Profiler)/.test(name)
+              ) return name;
+            }
+            fiber = fiber.return;
+          }
+        } catch (_) {}
+        return null;
+      }
+
+      // ── IMDb IPC component library + ARIA role heuristics ───────────────────
+      function detectComponentType(el) {
+        try {
+          const cls = typeof el.className === 'string' ? el.className : '';
+          const role = el.getAttribute('role') || '';
+          const tag = el.tagName.toLowerCase();
+          const hasExpanded = el.hasAttribute('aria-expanded');
+          const hasPopup   = el.hasAttribute('aria-haspopup');
+          const hasChecked = el.hasAttribute('aria-checked');
+
+          // IPC accordion: outer container vs clickable header
+          if (cls.includes('ipc-accordion')) return hasExpanded ? 'accordion_header' : 'accordion_container';
+          // Any element with aria-expanded that lives inside an accordion = its header button
+          if (hasExpanded && el.closest('[class*="ipc-accordion"]')) return 'accordion_header';
+          // Genre / filter chip toggles
+          if (cls.includes('ipc-chip')) return 'chip_toggle';
+          // Star rating widget
+          if (cls.includes('ipc-rating-star') || cls.includes('ipc-starbar')) return 'star_rating';
+          // Hamburger / nav drawer triggers have both aria-expanded and aria-haspopup
+          if (hasExpanded && hasPopup) return 'menu_trigger';
+          // Generic disclosure buttons (tab headers, dropdowns, etc.)
+          if (hasExpanded && (tag === 'button' || role === 'button')) return 'disclosure_button';
+          // Toggle switches (e.g. "Include adult titles")
+          if (hasChecked || role === 'switch') return 'toggle_switch';
+          // Tabs, menuitems, combos
+          if (role === 'tab') return 'tab';
+          if (role === 'menuitem') return 'menu_item';
+          if (role === 'combobox' || role === 'listbox') return 'dropdown';
+        } catch (_) {}
+        return null;
+      }
+
       const combined = selectors.join(',');
       const allNodes = Array.from(document.querySelectorAll(combined));
       const results = [];
@@ -187,7 +243,22 @@ export async function extractState(page, nodeId) {
         }
 
         const href = (el.tagName.toLowerCase() === 'a') ? (el.getAttribute('href') || '') : '';
-        results.push({ role, text, ariaLabel, cssSelector, dataTestId, href });
+
+        // ARIA state snapshot (null = attribute absent, string = current value)
+        const ariaExpanded = el.getAttribute('aria-expanded');
+        const ariaSelected = el.getAttribute('aria-selected');
+        const ariaChecked  = el.getAttribute('aria-checked');
+        const ariaControls = el.getAttribute('aria-controls');
+
+        // Component semantics
+        const componentType   = detectComponentType(el);
+        const reactComponent  = getReactComponentName(el);
+
+        results.push({
+          role, text, ariaLabel, cssSelector, dataTestId, href,
+          ariaExpanded, ariaSelected, ariaChecked, ariaControls,
+          componentType, reactComponent,
+        });
       }
 
       return results;
@@ -210,6 +281,15 @@ export async function extractState(page, nodeId) {
       text: el.text,
       aria_label: el.ariaLabel,
       href: el.href || undefined,
+      // ARIA state at crawl time (tells recorder the initial component state)
+      ...(el.ariaExpanded !== null && { aria_expanded: el.ariaExpanded }),
+      ...(el.ariaSelected !== null && { aria_selected: el.ariaSelected }),
+      ...(el.ariaChecked  !== null && { aria_checked:  el.ariaChecked }),
+      ...(el.ariaControls             && { aria_controls: el.ariaControls }),
+      // Semantic component type (drives interaction strategy in recorder)
+      ...(el.componentType            && { component_type: el.componentType }),
+      // React component name from fiber tree (richer than HTML tag alone)
+      ...(el.reactComponent           && { react_component: el.reactComponent }),
     };
   });
 

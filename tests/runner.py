@@ -379,7 +379,7 @@ def build_summary(results: list[dict], run_id: str, args) -> dict:
         d["avg_score"] = round(sum(s) / len(s), 2) if s else None
 
     # Score dimension averages
-    dim_totals = {k: [] for k in ("relevance", "completeness", "accuracy", "clarity", "navigation_quality")}
+    dim_totals = {k: [] for k in ("relevance", "completeness", "accuracy", "clarity", "navigation_quality", "executability")}
     for r in judged:
         for k, v in r["judge"].get("scores", {}).items():
             if k in dim_totals:

@@ -352,10 +352,10 @@ const IMDB_SEED_PAGES = [
   'https://www.imdb.com/search/title/?title_type=feature',
   'https://www.imdb.com/search/title/?title_type=short',
   'https://www.imdb.com/search/title/?title_type=tv_movie',
-  'https://www.imdb.com/search/title/?title_type=mini_series',
+  'https://www.imdb.com/search/title/?title_type=tv_miniseries',
   // Genre filters
   'https://www.imdb.com/search/title/?genres=horror',
-  'https://www.imdb.com/search/title/?genres=horror&release_date=1980,1989&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?genres=horror&release_date=1980-01-01,1989-12-31&sort=user_rating,desc',
   'https://www.imdb.com/search/title/?genres=comedy',
   'https://www.imdb.com/search/title/?genres=documentary',
   'https://www.imdb.com/search/title/?genres=animation',
@@ -378,7 +378,7 @@ const IMDB_SEED_PAGES = [
   'https://www.imdb.com/search/title/?keywords=stephen-king',
   // Rating and decade combos
   'https://www.imdb.com/search/title/?user_rating=8.0,10&sort=user_rating,desc',
-  'https://www.imdb.com/search/title/?release_date=2020,2025&sort=user_rating,desc',
+  'https://www.imdb.com/search/title/?release_date=2020-01-01,2025-12-31&sort=user_rating,desc',
   // Black-and-white filter
   'https://www.imdb.com/search/title/?colors=black_and_white&sort=user_rating,desc',
   // Multi-person co-appearance pattern

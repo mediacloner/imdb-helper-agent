@@ -6,6 +6,70 @@ from graph_client import GraphClient
 from ollama_client import chat
 from vector_store import VectorStore
 
+
+# ── Social greeting sanitiser ──────────────────────────────────────────────────
+# Users often prefix navigation questions with greetings like
+# "Hi, how are you, I hope you are well, Im here with my family and I want to
+# know how to see the directors of The Matrix".
+# Passing the full text to the LLM causes it to respond conversationally,
+# producing empty `steps` and therefore no video.
+#
+# Strategy:
+#   1. Look for "I want to know / I'd like to know / can you tell me" connector
+#      and extract the navigation question that follows.
+#   2. If not found, iteratively strip known leading-greeting patterns.
+
+# Social connector that bridges preamble → actual question
+_SOCIAL_CONNECTOR_RE = re.compile(
+    r"(?:and\s+)?i(?:'?m|\s+am)?\s*(?:just\s+)?(?:want(?:ing)?|need(?:ing)?|would\s+like)\s+to\s+"
+    r"(?:know|ask|find\s+out)\s+",
+    re.IGNORECASE,
+)
+
+# Leading-greeting patterns stripped one at a time from the front
+_LEADING_GREETING_PATTERNS = [
+    re.compile(r"^(hi+|hello+|hey+|greetings?|howdy)[,!.?\s]+", re.IGNORECASE),
+    re.compile(r"^how\s+(are\s+you|r\s+u)\b[^.!?,]*[.!?,]?\s*", re.IGNORECASE),
+    re.compile(r"^i\s+hope\s+you(?:'?re?|\s+are)?[\w\s]+?[.,!]\s*", re.IGNORECASE),
+    re.compile(r"^hope\s+you(?:'?re?|\s+are)?[\w\s]+?[.,!]\s*", re.IGNORECASE),
+    re.compile(r"^i(?:'?m|am)\s+here(?:\s+with\s+[^,]+)?[,!.\s]+", re.IGNORECASE),
+    re.compile(r"^im\s+here(?:\s+with\s+[^,]+)?[,!.\s]+", re.IGNORECASE),
+    re.compile(r"^please\s+(?:tell|help|show)\s+me\s+", re.IGNORECASE),
+    re.compile(r"^please[,!\s]+", re.IGNORECASE),
+    re.compile(r"^can\s+you\s+(?:tell|help|please|show)\s+me\s+", re.IGNORECASE),
+    re.compile(r"^could\s+you\s+(?:tell|help|please|show)\s+me\s+", re.IGNORECASE),
+    re.compile(r"^tell\s+me\s+", re.IGNORECASE),
+    re.compile(r"^i\s+(?:just\s+)?(?:want|need|would\s+like)\s+to\s+know\s+", re.IGNORECASE),
+    re.compile(r"^and\s+i\s+(?:just\s+)?(?:want|need|would\s+like)\s+to\s+know\s+", re.IGNORECASE),
+]
+
+
+def _clean_question(question: str) -> str:
+    """Strip social pleasantries from a question, returning the navigational core.
+    Falls back to the original question if nothing meaningful remains."""
+    text = question.strip()
+
+    # Strategy 1: find "I want to know ..." connector and extract what follows.
+    connector_match = _SOCIAL_CONNECTOR_RE.search(text)
+    if connector_match:
+        after = text[connector_match.end():].strip(" ,!.\t\n")
+        if len(after) > 5:
+            return after[:1].upper() + after[1:]
+
+    # Strategy 2: iteratively strip leading greeting phrases.
+    changed = True
+    while changed:
+        changed = False
+        for pat in _LEADING_GREETING_PATTERNS:
+            new = pat.sub("", text, count=1).strip(" ,!.\t\n")
+            if new and new != text:
+                text = new
+                changed = True
+                break
+
+    result = text[:1].upper() + text[1:] if text else ""
+    return result or question.strip()
+
 # Title IDs verified to exist — any other tt-ID in a generated URL will be stripped
 # so the recorder clicks from search results instead of navigating to a wrong page
 # Default example title used when the LLM omits sub-page URLs
@@ -55,19 +119,49 @@ _VERIFIED_TITLE_IDS = {
 }
 
 
-_INTENT_PROMPT = """You are an assistant that understands user intent on IMDb.
+_INTENT_PROMPT = """You are an assistant that maps user questions to IMDb page titles.
 Given a user question, extract:
-1. A keyword for the START page the user is likely on (default: "Ratings, Reviews").
+1. A keyword for the START page (default: "Ratings, Reviews").
 2. A keyword for the END page the user wants to reach.
 
-Use keywords that would appear in an IMDb page title. Examples:
-- "Top 250" for the top movies list
-- "Most popular" for popular movies
-- "Box office" for box office charts
-- "Full cast" for cast pages
-- "User reviews" for review pages
-- "Upcoming releases" for release calendar
-- "Genre" for genre browsing
+Use EXACT words from real IMDb page titles. Examples of real IMDb page titles:
+- "Top 250" → top-rated movies chart
+- "Most popular movies" or "most popular right now" → moviemeter (trending movies)
+- "Most popular TV shows" → TV show popularity chart (NOT videogamemeter)
+- "Video game meter" or "most popular video games" → videogamemeter (ONLY when question is about video games)
+- "Box office" → box office chart
+- "Full cast & crew" or "Full credits" → cast/crew pages
+- "User reviews" → movie review pages
+- "Parental guide" → age ratings, content warnings
+- "Filming locations" or "Filming & production" → where movies were filmed
+- "Technical specs" → technical information
+- "Release info" or "Release dates" → when/where movies were released
+- "Awards" → movie award nominations page
+- "Awards Central" → IMDb awards hub, Emmy, Oscar, Golden Globe, Cannes winners
+- "Box office" → financial data
+- "Plot summary" → storyline summaries
+- "Photo gallery" or "mediaindex" → movie photos
+- "Video gallery" or "Trailers" → video clips and trailers
+- "External sites" or "Official website" → external links
+- "Soundtrack" → music listings
+- "Full credits" → complete cast and crew
+- "Goofs" → movie mistakes
+- "Trivia" or "Did You Know" → movie trivia
+- "Quotes" → famous lines
+- "Movie connections" → referenced in, spoofed by
+- "Keywords" → movie keywords
+- "Company credits" → production companies
+- "Episode guide" or "Episodes" → TV show episode listings
+- "Biography" → celebrity biography and birthdate
+- "Filmography" → actor or director filmography
+- "Upcoming releases" or "Calendar" → release calendar
+- "Celebrity news" or "News" → IMDb news and editorial
+- "STARmeter" → celebrity popularity rankings
+- "Born Today" → celebrity birthdays today
+- "Bottom 100" → lowest-rated movies
+- "Video game" or "videogamemeter" → video game chart
+- "Advanced search" or "search/title" → advanced filter search
+- "Find" → title search
 
 Respond ONLY with a valid JSON object:
 {
@@ -97,11 +191,23 @@ Your response must be a JSON object with exactly two keys:
 CRITICAL RULES — read carefully before responding:
 - NEVER use Inception, The Dark Knight, or any other specific movie as an example UNLESS the user explicitly asked about that movie. For generic queries (genre filters, advanced search, franchise search, etc.) always use the URL patterns from the IMDb context — do NOT substitute a specific movie example.
 - For genre/filter/advanced-search queries, ALWAYS use the relevant https://www.imdb.com/search/title/?... URL from the context. Do NOT navigate to a specific movie page.
+- For filter queries (genre, year, language, rating, etc.) generate exactly TWO steps: (1) navigate to https://www.imdb.com/search/title/ and (2) navigate to the final combined filter URL. Use interaction_type "navigate" for BOTH — NEVER use search_query for filter parameters. The "answer" text MUST describe the UI actions in human terms — e.g. "On the left panel, click the **Genre** accordion header to expand it, click the **Documentary** chip (it highlights when selected), click the **Release date** accordion header, type **2020** in the 'from' year field and **2020** in the 'to' year field, then click the **See results** button at the top right." NEVER say "use the genres= parameter" or "set release_date=" — always describe the physical UI interaction with the accordion controls.
 - For franchise queries (Marvel, MCU, Star Wars, James Bond, etc.), use the keyword search URL pattern from context.
 - For multi-actor / co-appearance queries, use the role= URL pattern from context.
 - For TV episode queries (e.g. best episode of a show), use the /episodes/?season= URL pattern from context.
 - For award queries (Oscar, BAFTA, Emmy, Golden Globe), use the /awards-central/ and groups= URL patterns from context.
+- For Cannes / Venice / Berlin / Sundance / festival award queries: IMDb does NOT have a groups= parameter for these festivals. Navigate to https://www.imdb.com/search/title/ and use keywords= (e.g. keywords=palme-d-or, keywords=golden-lion) or describe using the Awards & recognition filter accordion.
 - For "mark as watched" / check-in queries, describe the eye/checkmark icon on the title page and the watchlist URL.
+- For production company / studio queries (e.g. "movies by Pixar"): use https://www.imdb.com/find/?q=<company>&s=co to find the company, then navigate to their title page, OR use https://www.imdb.com/search/title/?companies=<co_id> if the company ID is known.
+- For decade / era queries ("best movies of the 1980s", "films from the 1950s"): use release_date filter URL, e.g. https://www.imdb.com/search/title/?release_date=1980-01-01,1989-12-31&sort=user_rating,desc&num_votes=1000,
+- For silent film / black-and-white / era queries: combine release_date (e.g. 1920-1929) with colors=black_and_white.
+- For keyword searches ("movies with keyword 'artificial intelligence'"): use https://www.imdb.com/search/title/?keywords=<keyword> with the keyword in slug form.
+- For Stephen King / book adaptation queries: use https://www.imdb.com/search/title/?keywords=stephen-king or keywords=based-on-novel.
+- For "director who also acted / wrote / starred": use the role= URL with the person's nm-ID. If unknown, search for the person first.
+- For editorial/news content: navigate to https://www.imdb.com/news/movie/ for movie news and editorial picks.
+- For "sort by release date / rating" queries: use https://www.imdb.com/search/title/?sort=year,desc (newest first — IMDb uses `year` as the release date sort field) or sort=user_rating,desc (highest rated first).
+- For children's / parental guide filter queries: use https://www.imdb.com/search/title/?certificates=US:G or certificates=US:PG and describe using the US certificates accordion.
+- For "reviews sorted by helpfulness": navigate to a title's /reviews/ page and use the sort dropdown — the URL param is ?sort=helpfulnessScore&dir=desc.
 
 Rules for "answer":
 - ALWAYS describe the navigation as a sequence of human actions (click, search, scroll) — not just a URL
@@ -125,6 +231,14 @@ Rules for "steps":
 - For click steps that open a sub-section of a title page (reviews, trivia, quotes, parental guide, awards, etc.) ALWAYS include the full URL from the sub-page patterns in the context — do NOT leave url empty
 - Bottom 100 / lowest-rated movies chart: https://www.imdb.com/chart/bottom/ (NOT /chart/top/)
 - IMDb Contribution Portal: https://contribute.imdb.com/ (for reporting errors or adding titles)
+- IMDb does NOT have a "Top 10", "Top 20", "Top 50", or "Top 100" chart. The only ranked chart is "Top 250" at https://www.imdb.com/chart/top/ — always redirect "top N" queries there and explain this clearly.
+- CRITICAL URL parameter rules — NEVER invent parameters:
+  - Country filter: use `country_of_origin=<code>` (e.g. `country_of_origin=jp` for Japan). NEVER use `country=` or `countries=`.
+  - Company/studio filter: use `companies=<co_id>` with the IMDb company ID (e.g. `companies=co0048420` for Studio Ghibli, `companies=co0017902` for Pixar). NEVER use `production_company=` or `studio=`.
+  - Title type: use `title_type=feature` (NOT `featurefilm` or `movie`), `title_type=tv_miniseries` (NOT `mini_series`).
+  - Year/date filter: use `release_date=YYYY-MM-DD,YYYY-MM-DD` with full ISO dates. NEVER use `year=` or short `release_date=2010,2023`.
+  - Awards filter: use `groups=oscar_winners` (plural). NEVER use `oscar_winner` (singular).
+  - There is NO `studio=`, `director=`, `actor=`, `genre=`, `language=`, `rating=`, `votes=`, or `type=` URL parameter.
 
 Example — answer has 3 steps, steps array has exactly 3 entries:
 {
@@ -143,10 +257,14 @@ class QueryChain:
         self._graph_client = graph_client
 
     def run(self, question: str) -> dict[str, Any]:
+        # Strip social pleasantries before any LLM call so the model focuses on
+        # the navigation intent rather than responding conversationally.
+        nav_question = _clean_question(question)
+
         # 1. Extract intent (LLM call #1)
         intent_raw = chat(
             [{"role": "system", "content": _INTENT_PROMPT},
-             {"role": "user", "content": f"User question: {question}"}],
+             {"role": "user", "content": f"User question: {nav_question}"}],
             response_format="json",
         )
         try:
@@ -156,7 +274,7 @@ class QueryChain:
             end_description = intent.get("end_state", "")
         except (json.JSONDecodeError, AttributeError):
             start_description = ""
-            end_description = question
+            end_description = nav_question
 
         # 2. Query graph for a path
         steps: list[dict[str, Any]] = []
@@ -205,76 +323,156 @@ class QueryChain:
                         break
             # else: generic question — a path through Inception/Matrix is a valid example, keep it
 
-        # Force miss for queries the graph cannot answer — language/country, advanced filters,
-        # franchise/collection, cross-award, multi-actor co-appearance, show-specific episode rankings,
-        # genre filters, colour filters, keyword searches, and "mark as watched" user features
+        # Graph hit but path passes through podcast / video-game nodes.
+        # The fuzzy matcher picks podcast_series or videogamemeter nodes when
+        # queries contain words like "keyword", "type", "popular", "series".
+        # Check EVERY step (not just the last) so partial paths are caught.
+        if not graph_miss and steps:
+            _WRONG_TYPE_MARKERS = ("podcast", "videogame", "video_game", "videogamemeter")
+            for step in steps:
+                step_blob = step.get("url", "").lower() + " " + step.get("description", "").lower()
+                if any(m in step_blob for m in _WRONG_TYPE_MARKERS):
+                    graph_miss = True
+                    break
+
+        # Graph hit but ALL steps have null interaction_type — partial null check.
+        # Already caught if ALL are null above; also miss if MOST are null (≥ 60%),
+        # which indicates the graph returned a disconnected node list rather than
+        # a real traversal path.
+        if not graph_miss and steps and len(steps) > 2:
+            null_count = sum(
+                1 for s in steps
+                if s.get("action", {}).get("interaction_type") is None
+            )
+            if null_count / len(steps) >= 0.6:
+                graph_miss = True
+
+        # Graph hit but path is too long (> 10 steps) — very long indirect paths
+        # are almost always caused by the fuzzy matcher anchoring on a generic
+        # keyword in an unrelated node.  Cap at 10 to force a cleaner LLM answer.
+        if not graph_miss and len(steps) > 10:
+            graph_miss = True
+
+        # Force miss for queries the graph cannot answer — language/country, advanced
+        # parametric filters, franchise collections, multi-actor co-appearance,
+        # cross-award searches, and account-level features.
+        # IMPORTANT: keep this list NARROW — only force-miss when the graph truly cannot
+        # produce a useful path. Over-broad keywords block valid graph paths.
         _FORCE_MISS_KEYWORDS = {
-            # Language / nationality
-            "spanish", "french", "italian", "german", "japanese", "korean",
-            "chinese", "portuguese", "russian", "arabic", "hindi", "turkish",
-            "swedish", "danish", "norwegian", "polish", "dutch",
-            "mexico", "spain", "france", "italy", "germany", "brazil",
-            "south korea", "united kingdom", "british", "uk ",
-            # Genre filter queries
-            "horror", "war movie", "war film", "sci-fi", "science fiction",
-            "documentary", "mini-series", "miniseries", "limited series",
-            "short film", "short horror",
-            # Colour / visual style filters
-            "black and white", "black & white", "b&w", "monochrome",
-            # Advanced multi-criteria / combined filters
-            "highest rated", "top rated", "sorted by rating", "sort by rating",
-            "best rated", "most voted", "filter by", "search filter",
-            # Franchise / collection
-            "franchise", "marvel", "mcu", "dc extended", "dceu",
-            "star wars", "james bond", "harry potter", "lord of the rings",
-            "stephen king", "based on novel", "based on book",
-            # Multi-actor / co-appearance
-            "both ", "co-star", "co-appear", "appeared together", "movies with both",
-            "films with both", "starring both",
-            # Cross-award searches
+            # ── Language / nationality filters ───────────────────────────────────────
+            # Graph has no language= or country_of_origin= filter nodes
+            "spanish", "french film", "italian film", "german film",
+            "japanese film", "korean film", "chinese film", "portuguese",
+            "russian film", "arabic film", "hindi", "turkish film",
+            "swedish film", "danish film", "norwegian film", "polish film", "dutch film",
+            "bollywood", "south korea", "united kingdom", "british film",
+            "from spain", "from france", "from brazil", "from mexico",
+            "from italy", "from germany", "from japan", "from korea",
+            "in spanish", "in french", "in italian", "in portuguese",
+            "in japanese", "in korean", "in hindi", "in arabic",
+            "neo-realist", "italian cinema", "french cinema", "german cinema",
+            # ── Franchise / collection searches ──────────────────────────────────────
+            "marvel cinematic", "mcu film", "dc extended", "dceu",
+            "james bond film", "harry potter film", "lord of the rings film",
+            "star wars film",
+            # ── Keyword-based searches (use keywords= URL param) ─────────────────────
+            "stephen king", "based on novel", "based on book", "film adaptation",
+            "all adaptations", "novels on imdb", "book adaptation",
+            # ── Multi-actor / co-appearance ───────────────────────────────────────────
+            "co-star", "co-appear", "appeared together", "starring both",
+            "films with both", "movies with both actors", "same two actors",
+            # ── Director who also acted (use role= URL param) ─────────────────────────
+            "director also appears", "director who also acted", "directed and starred",
+            "directed by.*actor", "director.*also act", "wrote, directed, and starred",
+            "same person wrote", "wrote directed starred",
+            # ── Cross-award multi-criteria ─────────────────────────────────────────────
             "oscar and bafta", "oscar & bafta", "bafta and oscar",
-            "emmy and", "golden globe and", "award winner", "award nominee",
-            "cross-award", "multiple award",
-            # Show-specific episode ranking
-            "highest rated episode", "best episode", "top episode",
-            "sopranos episode", "breaking bad episode", "game of thrones episode",
-            # Mark as watched / user account features
+            "emmy and golden", "multiple award winner", "multiple award nominee",
+            "cross-award", "won both oscar",
+            # ── Non-IMDb-group festival awards (no groups= param for these) ────────────
+            "cannes", "palme d'or", "palme dor", "venice film festival",
+            "berlin film festival", "sundance", "golden lion", "silver bear",
+            # ── Production company / studio search ───────────────────────────────────
+            "produced by a specific", "production company", "movies produced by",
+            "films produced by", "movies from studio", "films from studio",
+            "studio behind", "made by pixar", "made by a24", "made by marvel",
+            # ── Mark as watched / personal account features ───────────────────────────
             "mark as watched", "mark as seen", "check-in", "checkin",
             "watched list", "seen list", "add to watched",
-            # World War / historical keyword searches
-            "world war ii", "wwii", "world war 2", "ww2",
-            # Ongoing / season count queries
-            "still ongoing", "still airing", "still running", "number of seasons",
-            "how many seasons",
-            # Generic person/search queries — graph only has specific movie paths,
-            # so "how do I find/look up an actor/director/writer" must use search steps
-            "look up an actor", "look up actor", "look up a director", "look up director",
+            # ── Ongoing / status queries ──────────────────────────────────────────────
+            "still ongoing", "still airing", "still running",
+            # ── Generic person lookup (use search steps, not graph path) ─────────────
             "find an actor", "find a director", "find an actress", "find a writer",
             "find a person", "search for an actor", "search for a director",
             "look up a person", "look up someone", "find someone on imdb",
-            "look up a tv show", "find a tv show", "search for a tv show",
-            "look up a show", "find a show",
-            # Generic navigation questions that need general search instructions
-            "how do i find a", "how do i look up", "how to find a", "how to look up",
-            # Generic search questions — graph only has specific paths, not "how to search"
-            "how do i search", "search for a movie", "search for a tv",
+            "find a tv show", "search for a tv show", "find a show",
+            # ── Generic "how to search" — no specific graph destination ───────────────
+            "how do i search", "search for a movie", "search for a tv show",
             "find out what year", "what year a movie",
-            "date of birth of", "birthday of a", "celebrity born",
-            "filmography of", "career filmography", "sorted from first", "chronological",
-            # Charts the graph doesn't know
-            "bottom 100", "worst 100", "lowest rated movies", "lowest-rated movies",
-            # Contribution / reporting — no graph path
-            "report an error", "report error", "incorrect information", "wrong information",
-            "contribute", "suggest a new title", "add a new title", "submit a title",
-            # Social / follow features that don't exist on IMDb public pages
+            "birthday of a celebrity", "celebrities born on",
+            # ── Decade / era searches (need release_date filter URL) ──────────────────
+            "decade", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s",
+            "1980s", "1990s", "2000s", "2010s", "2020s",
+            "from the 50s", "from the 60s", "from the 70s", "from the 80s",
+            "from the 90s", "best of each decade",
+            # ── Silent / vintage / era-specific films ─────────────────────────────────
+            "silent film", "silent era", "black and white film",
+            # ── Genre/type/style filters (need parametric URL, graph has no specific node) ─
+            # Graph has only a generic Genre browse page — specific queries need filter URLs
+            "horror", "war movie", "war film", "sci-fi", "science fiction",
+            "documentary", "animation genre", "thriller genre",
+            "black and white", "black & white", "b&w", "monochrome",
+            "mini-series", "miniseries", "limited series",
+            "short film", "short horror", "films under 30",
+            "only tv movies", "only feature films", "only theatrical",
+            "animated movie", "animated film", "g rating", "rated g",
+            "suitable for children", "suitable for young", "appropriate for kids",
+            "children under", "parental guide rating",
+            # ── Actor/director + genre combos (need parametric search URL) ────────────
+            "movies starring", "films starring", "movies featuring", "films featuring",
+            "directed by a specific", "movies directed by", "films directed by",
+            # ── Keyword-based search queries ──────────────────────────────────────────
+            "search by keyword", "filter by keyword", "movies with keyword",
+            "keyword search", "by keyword",
+            # ── Sort / order queries (not a graph state, needs search URL with sort=) ──
+            "sort by release date", "sort by rating", "newest first", "oldest first",
+            "sorted by", "order by release", "most recent first",
+            # ── Remake searches ────────────────────────────────────────────────────────
+            "foreign language remake", "language remake", "remake of",
+            "american remake", "original and the remake",
+            # ── Editorial / news content ──────────────────────────────────────────────
+            "editorial pick", "featured article", "editorial content",
+            "imdb editorial", "browse articles", "imdb news article",
+            # ── User review sorting ────────────────────────────────────────────────────
+            "reviews sorted by helpfulness", "sort reviews by", "most helpful review",
+            "sorted by helpfulness", "helpful review sort",
+            # ── Actor least-known / obscure filmography ───────────────────────────────
+            "least-known film", "lowest-rated film of", "least known movie of",
+            "obscure film of an actor", "actor's worst film",
+            # ── Streaming availability — no graph nodes ──────────────────────────────
+            "available to stream", "streaming on", "watch on ",
+            "amazon prime", "netflix", "disney+", "hulu", "streaming service",
+            "where to watch", "connect my imdb account to amazon",
+            "link imdb to amazon", "imdb to amazon prime",
+            # ── Rating actions (not navigation) ──────────────────────────────────────
+            "how do i rate", "rate a movie", "rate this movie", "give a rating",
+            "submit a rating", "rating a title",
+            # ── Episode/season COUNT queries (not navigation) ─────────────────────────
+            "episode count", "how many episodes in", "episodes per season",
+            "seasons and episodes count", "number of episodes in",
+            # ── Social / follow features ──────────────────────────────────────────────
             "follow other users", "follow user", "follow list",
+            # ── Account sign-in / login (not a navigable IMDb page path) ─────────────
+            "sign in", "log in", "login", "sign into my", "sign into imdb",
+            "imdb account", "create an account", "register account",
+            "connect my imdb", "link my imdb",
         }
-        q_lower = question.lower()
+        q_lower = nav_question.lower()
         if not graph_miss and any(kw in q_lower for kw in _FORCE_MISS_KEYWORDS):
             graph_miss = True
 
-        # 3. Retrieve IMDb context chunks
-        rag_chunks = self._vector_store.search(question, k=8)
+        # 3. Retrieve IMDb context chunks (use cleaned question for better embedding match)
+        rag_chunks = self._vector_store.search(nav_question, k=8)
         context_text = "\n\n".join(c["text"] for c in rag_chunks) if rag_chunks else ""
 
         if not graph_miss:
@@ -282,13 +480,13 @@ class QueryChain:
             path_text = self._format_path_for_llm(steps)
             answer = chat(
                 [{"role": "system", "content": _ANSWER_WITH_PATH_PROMPT},
-                 {"role": "user", "content": f"User question: {question}\n\nNavigation path:\n{path_text}"}],
+                 {"role": "user", "content": f"User question: {nav_question}\n\nNavigation path:\n{path_text}"}],
             ).strip()
         else:
             # Graph miss: combined answer + steps in ONE call (LLM call #2)
             combined_raw = chat(
                 [{"role": "system", "content": _ANSWER_AND_STEPS_PROMPT},
-                 {"role": "user", "content": f"IMDb context:\n{context_text}\n\nUser question: {question}"}],
+                 {"role": "user", "content": f"IMDb context:\n{context_text}\n\nUser question: {nav_question}"}],
                 response_format="json",
             )
             combined = self._parse_json_object(combined_raw)
@@ -360,6 +558,10 @@ class QueryChain:
                         "", description, flags=re.IGNORECASE
                     ).strip()
 
+            # contribute.imdb.com deep paths 404 — land on the portal home instead
+            if url and "contribute.imdb.com" in url and len(url) > len("https://contribute.imdb.com/"):
+                url = "https://contribute.imdb.com/"
+
             # Correct Bottom 100 chart hallucination: LLM sometimes uses /chart/top/
             # for questions about lowest-rated / worst movies
             if url and "/chart/top/" in url:
@@ -368,13 +570,26 @@ class QueryChain:
                     url = "https://www.imdb.com/chart/bottom/"
 
             # For click steps that navigate to a title sub-page but have no URL,
-            # infer the URL from the description so the recorder can _goto as fallback
+            # infer the URL from the description so the recorder can _goto as fallback.
+            # GUARD: skip this inference for filter/search/browse steps — injecting
+            # the Inception example URL onto a "filter by genre" step causes the
+            # recorder to visit Inception's subpage instead of a search results page.
+            _SUBPAGE_FILTER_INDICATORS = {
+                "filter", "search", "find", "sort", "browse", "decade", "genre",
+                "year", "rating", "language", "type", "documentary", "animated",
+                "animated film", "release date", "newest", "oldest", "popular",
+                "chart", "list", "all movies", "all films", "oscar", "bafta",
+                "emmy", "grammy", "festival", "cannes", "palme", "silent film",
+                "1920", "1930", "1940", "1950", "select", "apply", "results",
+            }
             if itype == "click" and not url:
                 desc_lower = description.lower()
-                for kw, path_suffix in _SUBPAGE_URL_MAP.items():
-                    if kw in desc_lower:
-                        url = f"https://www.imdb.com/title/{_DEFAULT_EXAMPLE_ID}{path_suffix}"
-                        break
+                is_filter_step = any(ind in desc_lower for ind in _SUBPAGE_FILTER_INDICATORS)
+                if not is_filter_step:
+                    for kw, path_suffix in _SUBPAGE_URL_MAP.items():
+                        if kw in desc_lower:
+                            url = f"https://www.imdb.com/title/{_DEFAULT_EXAMPLE_ID}{path_suffix}"
+                            break
 
             steps.append({
                 "node_id": f"synthetic_{i}",

@@ -151,12 +151,21 @@ def judge_answer(
             scores.setdefault(key, 0)
         result["scores"] = scores
 
-        overall = result.get("overall")
-        if overall is None:
-            vals = list(scores.values())
-            overall = round(sum(vals) / len(vals), 1) if vals else 0.0
-        result["overall"] = float(overall)
-        result.setdefault("pass", result["overall"] >= config.PASS_THRESHOLD)
+        # Always recompute overall with fixed weights — ignore the LLM's self-reported
+        # value which uses arbitrary weights and can be inconsistent.
+        # executability + navigation_quality carry 55% because they measure whether the
+        # browser actually reached the right place, which is the hardest thing to get right.
+        _WEIGHTS = {
+            "executability":      0.30,
+            "navigation_quality": 0.25,
+            "accuracy":           0.20,
+            "completeness":       0.12,
+            "relevance":          0.08,
+            "clarity":            0.05,
+        }
+        overall = round(sum(scores.get(k, 0) * w for k, w in _WEIGHTS.items()), 1)
+        result["overall"] = overall
+        result["pass"] = overall >= config.PASS_THRESHOLD
         result.setdefault("strengths", [])
         result.setdefault("weaknesses", [])
         result.setdefault("reasoning", "")

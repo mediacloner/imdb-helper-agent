@@ -37,7 +37,21 @@
       "Bash(echo \"=== $dir ===\")",
       "Read(//home/alex/Documents/repos/AI/IMDB helper/$dir/**)",
       "Bash(done)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git:*)",
+      "Bash(docker:*)",
+      "Bash(find:*)",
+      "Bash(until curl:*)",
+      "WebFetch(domain:m.imdb.com)",
+      "WebFetch(domain:web.archive.org)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "WebFetch(domain:developer.imdb.com)",
+      "WebFetch(domain:community-imdb.sprinklr.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.diaryfolio.com)",
+      "WebFetch(domain:help.imdb.com)",
+      "WebFetch(domain:greasyfork.org)"
     ]
   }
 }
