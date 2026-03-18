@@ -273,15 +273,21 @@ _TITLE_DROP_WORDS = {
 }
 
 
-def _extract_subject_title(end_description: str) -> str:
-    """Extract the subject film/show name from an LLM-extracted end state description.
+def _extract_subject_title(text: str) -> str:
+    """Extract the subject film/show name from a description or user question.
 
-    Strips common navigation/UI terms; returns remaining words as the title candidate.
-    Returns empty string for generic queries (no specific title to extract).
+    Prefers capitalized words (proper nouns = likely title) over lowercase words.
+    Strips common navigation/UI/question terms.
+    Returns empty string for generic queries with no identifiable title.
     """
-    words = re.findall(r"[a-zA-Z']+", end_description)
-    candidates = [w for w in words if w.lower() not in _TITLE_DROP_WORDS and len(w) > 2]
-    return " ".join(candidates[:3]) if candidates else ""
+    words = re.findall(r"[a-zA-Z']+", text)
+    # First pass: capitalized words only (e.g. "Amelie", "Friends", "Terminator")
+    caps = [w for w in words if w[0].isupper() and w.lower() not in _TITLE_DROP_WORDS and len(w) > 2]
+    if caps:
+        return " ".join(caps[:3])
+    # Second pass: any non-stop word (handles all-lowercase input)
+    lower = [w for w in words if w.lower() not in _TITLE_DROP_WORDS and len(w) > 2]
+    return " ".join(lower[:3]) if lower else ""
 
 
 class QueryChain:
