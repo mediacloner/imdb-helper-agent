@@ -572,9 +572,19 @@ class QueryChain:
             ).strip()
         else:
             # Graph miss: combined answer + steps in ONE call (LLM call #2)
+            # When title mismatch was detected, strip title-specific URLs from
+            # context so the LLM cannot copy e.g. Inception's /title/tt1375666/trivia/
+            # URL for a query about a completely different film.
+            llm_context = context_text
+            if _path_hint:
+                llm_context = re.sub(
+                    r"https?://(?:www\.)?imdb\.com/title/tt\d+[^\s)\"]*",
+                    "<URL-removed-different-title>",
+                    llm_context,
+                )
             combined_raw = chat(
                 [{"role": "system", "content": _ANSWER_AND_STEPS_PROMPT},
-                 {"role": "user", "content": f"IMDb context:\n{context_text}\n\nUser question: {nav_question}{_path_hint}"}],
+                 {"role": "user", "content": f"IMDb context:\n{llm_context}\n\nUser question: {nav_question}{_path_hint}"}],
                 response_format="json",
             )
             combined = self._parse_json_object(combined_raw)
