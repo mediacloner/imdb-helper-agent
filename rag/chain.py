@@ -208,6 +208,7 @@ CRITICAL RULES — read carefully before responding:
 - For "sort by release date / rating" queries: use https://www.imdb.com/search/title/?sort=year,desc (newest first — IMDb uses `year` as the release date sort field) or sort=user_rating,desc (highest rated first).
 - For children's / parental guide filter queries: use https://www.imdb.com/search/title/?certificates=US:G or certificates=US:PG and describe using the US certificates accordion.
 - For "reviews sorted by helpfulness": navigate to a title's /reviews/ page and use the sort dropdown — the URL param is ?sort=helpfulnessScore&dir=desc.
+- For mood / sentiment / opinion / feeling queries about a specific movie or TV show (e.g. "mood of people about Amelie", "what do people think of The Matrix", "opinion of users for Friends"): ALWAYS use EXACTLY 3 steps: (1) search_query the title name, (2) click the first search result using the title name as target_element_id, (3) click "User reviews" using interaction_type "click" and target_element_id "User reviews". Do NOT navigate to the title page directly — always go search → click result → click User reviews.
 
 Rules for "answer":
 - ALWAYS describe the navigation as a sequence of human actions (click, search, scroll) — not just a URL
@@ -554,6 +555,13 @@ class QueryChain:
             "sign in", "log in", "login", "sign into my", "sign into imdb",
             "imdb account", "create an account", "register account",
             "connect my imdb", "link my imdb",
+            # ── Sentiment / mood / opinion queries ────────────────────────────────────
+            # These are NOT navigation queries — the LLM doesn't know where to route
+            # them and returns empty JSON. Force-miss so it generates user-review steps.
+            "mood of", "mood about", "sentiment", "opinion of people",
+            "opinion of users", "what people think", "what do people think",
+            "feeling about", "public opinion", "public sentiment",
+            "how do people feel", "how people feel",
         }
         q_lower = nav_question.lower()
         if not graph_miss and any(kw in q_lower for kw in _FORCE_MISS_KEYWORDS):
@@ -590,15 +598,68 @@ class QueryChain:
             combined = self._parse_json_object(combined_raw)
             answer = combined.get("answer", "")
             steps = self._build_steps(combined.get("steps", []))
-            # Fallback: if the LLM returned an answer but no parseable steps,
-            # generate a minimal search step so the recorder at least visits IMDb
-            # and shows the search bar rather than producing no video at all.
-            if not steps and answer:
-                steps = self._build_steps([{
-                    "description": "Search on IMDb",
-                    "url": "https://www.imdb.com/search/title/",
-                    "action": {"interaction_type": "navigate", "target_element_id": None},
-                }])
+            # Fallback: LLM returned empty steps (e.g. content-policy guardrails
+            # blocked the response for a title like "Star Wars").
+            # Extract the subject title using several heuristics, then build a
+            # search → user-reviews flow so the recorder still produces a useful video.
+            if not steps:
+                # Heuristic 1: grab text after "about" or "for" in the cleaned question
+                # e.g. "the mood of people about star wars" → "star wars" → "Star Wars"
+                subject = ""
+                _about_match = re.search(
+                    r"\b(?:about|for)\s+([A-Za-z][A-Za-z0-9 '&:]{1,50}?)(?:\s*[?.,!]|$)",
+                    nav_question, re.IGNORECASE,
+                )
+                if _about_match:
+                    _candidate = _about_match.group(1).strip()
+                    _generic = {"people", "users", "user", "viewers", "audiences", "fans", "them", "this", "it"}
+                    if _candidate.lower() not in _generic and len(_candidate) > 2:
+                        subject = _candidate.title()  # "star wars" → "Star Wars"
+
+                # Heuristic 2: _extract_subject_title on the original (pre-clean) question
+                # which preserves the user’s own capitalisation ("Star Wars", "The Matrix")
+                if not subject:
+                    subject = _extract_subject_title(question)
+
+                # Heuristic 3: use the LLM’s end_description when it looks like a title
+                if not subject and end_description:
+                    _end_words = end_description.split()
+                    if 1 <= len(_end_words) <= 3 and _end_words[0][0].isupper():
+                        subject = end_description
+
+                if subject:
+                    _sq = subject.replace(' ', '+')
+                    search_url = f"https://www.imdb.com/find/?q={_sq}&s=tt"
+                    fallback_raw = [
+                        {
+                            "description": f"Search for {subject}",
+                            "url": search_url,
+                            "action": {"interaction_type": "search_query", "target_element_id": subject},
+                        },
+                        {
+                            "description": f"{subject} page",
+                            "url": "",
+                            "action": {"interaction_type": "click", "target_element_id": subject},
+                        },
+                        {
+                            "description": "User reviews",
+                            "url": "",
+                            "action": {"interaction_type": "click", "target_element_id": "User reviews"},
+                        },
+                    ]
+                    if not answer:
+                        answer = (
+                            f"1. Search for '{subject}' in the IMDb search bar\n"
+                            f"2. Click the result to open its page\n"
+                            f"3. Click 'User reviews' to read what people think"
+                        )
+                else:
+                    fallback_raw = [{
+                        "description": "Search on IMDb",
+                        "url": "https://www.imdb.com/search/title/",
+                        "action": {"interaction_type": "navigate", "target_element_id": None},
+                    }]
+                steps = self._build_steps(fallback_raw)
 
         start_node_id = steps[0].get("node_id", "") if steps else ""
         end_node_id = steps[-1].get("node_id", "") if steps else ""
@@ -691,6 +752,10 @@ class QueryChain:
                 "chart", "list", "all movies", "all films", "oscar", "bafta",
                 "emmy", "grammy", "festival", "cannes", "palme", "silent film",
                 "1920", "1930", "1940", "1950", "select", "apply", "results",
+                # "user reviews" click steps must NOT get a default title URL injected
+                # (e.g. Inception's tt1375666) — the recorder should click the link on
+                # whatever title page it already navigated to (e.g. Amelie's page).
+                "user reviews",
             }
             if itype == "click" and not url:
                 desc_lower = description.lower()

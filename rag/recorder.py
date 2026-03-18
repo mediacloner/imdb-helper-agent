@@ -2,6 +2,7 @@ import asyncio
 import math
 import os
 import random
+import re
 import shutil
 import uuid
 from typing import Any
@@ -801,6 +802,39 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
                                     method_used = "navigated"
                                 else:
                                     method_used = "clicked_link"
+                        else:
+                            # No URL fallback — but if the target smells like a title subpage
+                            # (e.g. "User reviews", "Trivia", "Awards") and the recorder is
+                            # already on an IMDb title page, derive the URL from the live
+                            # page.url so we can still navigate (e.g. Amelie's /reviews/).
+                            _cur = page.url
+                            _tt_m = re.search(r"/title/(tt\d+)", _cur)
+                            _SUBPAGE_KEYWORDS = {
+                                "user reviews": "/reviews/",
+                                "reviews": "/reviews/",
+                                "trivia": "/trivia/",
+                                "awards": "/awards/",
+                                "episodes": "/episodes/",
+                                "full cast": "/fullcredits/",
+                                "cast": "/fullcredits/",
+                                "crew": "/fullcredits/",
+                                "goofs": "/trivia/?tab=gf",
+                                "quotes": "/trivia/?tab=qt",
+                                "soundtrack": "/soundtrack/",
+                                "filming locations": "/locations/",
+                                "parents guide": "/parentalguide/",
+                            }
+                            _tgt_lower = target.lower()
+                            _derived_suffix = next(
+                                (sfx for kw, sfx in _SUBPAGE_KEYWORDS.items() if kw in _tgt_lower), None
+                            )
+                            if _tt_m and _derived_suffix:
+                                _derived_url = f"https://www.imdb.com/title/{_tt_m.group(1)}{_derived_suffix}"
+                                nav_ok = await _navigate_via_menu(page, _derived_url, use_hamburger=False)
+                                if not nav_ok:
+                                    await _goto(page, _derived_url)
+                                method_used = "navigated"
+                                url = _derived_url  # so the step is logged
                     if filter_sub_steps:
                         for s in filter_sub_steps:
                             s["step"] = i
