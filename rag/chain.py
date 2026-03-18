@@ -225,10 +225,12 @@ Rules for "steps":
 - NEVER invent a title ID (ttXXXXXXX) not in the context — use a click step with "" url instead
 - "action":
   - "interaction_type": "search_query" when the step is a search, "click" when clicking a button/link, "navigate" when going to a direct URL
-  - "target_element_id": for search_query put the SEARCH TERM, for click put the visible label text, for navigate use null
+  - "target_element_id": for search_query put the SEARCH TERM, for click put the SHORT VISIBLE LABEL TEXT ONLY (e.g. "Trivia", "Awards", "User reviews") — NEVER a full sentence or description, for navigate use null
+- CRITICAL: for click steps, target_element_id must be the EXACT SHORT TEXT visible on the link or button — e.g. "Trivia" not "Click the Trivia link", "User reviews" not "Click on user reviews section". A sentence as target will NEVER work.
 - For search_query steps, target_element_id MUST be a real specific name (e.g. "The Matrix", "Tom Hanks") — NEVER a placeholder like "the movie title" or "the actor name"
 - For the first step of any search/lookup question, use a search_query step with a real example term
 - For click steps that open a sub-section of a title page (reviews, trivia, quotes, parental guide, awards, etc.) ALWAYS include the full URL from the sub-page patterns in the context — do NOT leave url empty
+- When the title ID is NOT known (not in context), use EXACTLY 3 steps: (1) search_query the title name, (2) click the first search result using the title name as target_element_id, (3) click the sub-section link using its SHORT visible label (e.g. "Trivia", "Awards"). Do NOT collapse these into fewer steps.
 - Bottom 100 / lowest-rated movies chart: https://www.imdb.com/chart/bottom/ (NOT /chart/top/)
 - IMDb Contribution Portal: https://contribute.imdb.com/ (for reporting errors or adding titles)
 - IMDb does NOT have a "Top 10", "Top 20", "Top 50", or "Top 100" chart. The only ranked chart is "Top 250" at https://www.imdb.com/chart/top/ — always redirect "top N" queries there and explain this clearly.
@@ -240,13 +242,23 @@ Rules for "steps":
   - Awards filter: use `groups=oscar_winners` (plural). NEVER use `oscar_winner` (singular).
   - There is NO `studio=`, `director=`, `actor=`, `genre=`, `language=`, `rating=`, `votes=`, or `type=` URL parameter.
 
-Example — answer has 3 steps, steps array has exactly 3 entries:
+Example A — title ID known, 3 steps:
 {
   "answer": "1. Search for 'The Matrix' in the search bar\\n2. Click the movie result to open its page\\n3. Click 'Full cast & crew' to see all actors (https://www.imdb.com/title/tt0133093/fullcredits/)",
   "steps": [
     {"description": "Search for The Matrix", "url": "https://www.imdb.com/find/?q=The+Matrix&s=tt", "action": {"interaction_type": "search_query", "target_element_id": "The Matrix"}},
     {"description": "The Matrix movie page", "url": "https://www.imdb.com/title/tt0133093/", "action": {"interaction_type": "navigate", "target_element_id": null}},
     {"description": "Full cast & crew", "url": "https://www.imdb.com/title/tt0133093/fullcredits/", "action": {"interaction_type": "navigate", "target_element_id": null}}
+  ]
+}
+
+Example B — title ID NOT known (e.g. user asks about Friends trivia), EXACTLY 3 steps:
+{
+  "answer": "1. Search for 'Friends' in the search bar\\n2. Click the TV series result to open its page\\n3. Scroll to the 'Did you know' section and click 'Trivia'",
+  "steps": [
+    {"description": "Search for Friends", "url": "https://www.imdb.com/find/?q=Friends&s=tt", "action": {"interaction_type": "search_query", "target_element_id": "Friends"}},
+    {"description": "Friends TV series page", "url": "", "action": {"interaction_type": "click", "target_element_id": "Friends"}},
+    {"description": "Trivia section", "url": "", "action": {"interaction_type": "click", "target_element_id": "Trivia"}}
   ]
 }"""
 
