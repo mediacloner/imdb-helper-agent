@@ -1,5 +1,76 @@
 [
   {
+    "run_id": "20260318_084759",
+    "generated_at": "2026-03-18T09:05:08.568722",
+    "questions": 23,
+    "pass_rate_pct": 69.6,
+    "avg_score": 7.32,
+    "graph_hit_rate_pct": 56.5,
+    "videos_recorded": 20,
+    "errors": 0,
+    "partial": true
+  },
+  {
+    "run_id": "20260318_075853",
+    "generated_at": "2026-03-18T08:10:50.137813",
+    "questions": 20,
+    "pass_rate_pct": 52.6,
+    "avg_score": 6.26,
+    "graph_hit_rate_pct": 15.0,
+    "videos_recorded": 17,
+    "errors": 1,
+    "partial": true
+  },
+  {
+    "run_id": "20260318_072755",
+    "generated_at": "2026-03-18T07:34:53.623720",
+    "questions": 8,
+    "pass_rate_pct": 75.0,
+    "avg_score": 7.53,
+    "graph_hit_rate_pct": 87.5,
+    "videos_recorded": 7,
+    "errors": 0,
+    "partial": true
+  },
+  {
+    "run_id": "20260318_071738",
+    "generated_at": "2026-03-18T07:19:31.394490",
+    "questions": 4,
+    "pass_rate_pct": 75.0,
+    "avg_score": 6.9,
+    "graph_hit_rate_pct": 25.0,
+    "videos_recorded": 1,
+    "errors": 0,
+    "partial": true
+  },
+  {
+    "run_id": "20260318_070453",
+    "generated_at": "2026-03-18T07:06:54.148477",
+    "questions": 1,
+    "pass_rate_pct": 100.0,
+    "avg_score": 10.0,
+    "graph_hit_rate_pct": 100.0,
+    "videos_recorded": 1,
+    "errors": 0,
+    "partial": true
+  },
+  {
+    "run_id": "20260317_214036",
+    "generated_at": "2026-03-18T05:13:47.468337+00:00",
+    "questions": 200,
+    "pass_rate_pct": 75.5,
+    "avg_score": 7.78,
+    "graph_hit_rate_pct": 59.5,
+    "videos_recorded": 155,
+    "errors": 4,
+    "config": {
+      "rag_url": "http://localhost:8000",
+      "judge_model": "qwen3:8b",
+      "pass_threshold": 6.0,
+      "record_video": true
+    }
+  },
+  {
     "run_id": "20260317_163042",
     "generated_at": "2026-03-17T20:04:12.200452",
     "questions": 148,

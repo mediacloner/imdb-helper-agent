@@ -220,6 +220,11 @@ async def _navigate_via_menu(page: Page, target_url: str, use_hamburger: bool = 
         'label[for="imdb-header-responsive-nav-toggle"]',
         'label[for*="sidebar"]',
         '.ipc-responsive-button:has-text("Menu")',
+        # Broader fallbacks for IMDb header nav button variants
+        '[data-testid="ipc-responsive-button"]',
+        'button.ipc-responsive-button',
+        'button[class*="nav-toggle"]',
+        'button[class*="hamburger"]',
     ]
     for sel in _HAMBURGER_SELS:
         try:
@@ -276,10 +281,6 @@ async def _goto(page: Page, url: str) -> None:
         await page.wait_for_timeout(1500)
         await _dismiss_cookie_banner(page)
         await page.wait_for_timeout(1000)
-        # After loading a new page, sweep the mouse across the content area so
-        # the cursor visibly moves in the video instead of sitting frozen.
-        # This simulates a user scanning the page after navigation.
-        await _mouse_wander(page)
     except Exception:
         pass
 
@@ -311,14 +312,23 @@ async def _click_first_find_result(page: Page) -> bool:
     if "/find" not in page.url:
         return False
     for sel in [
+        # Modern IMDb (2024-2025) data-testid patterns
         '[data-testid="find-result-item"] a[href*="/title/"]',
+        '[data-testid="find-title-result"] a[href*="/title/"]',
+        'section[data-testid^="find-results"] a[href*="/title/"]',
+        # IPC component class patterns
+        'li.ipc-metadata-list-summary-item a[href*="/title/tt"]',
+        '.ipc-metadata-list-summary-item a[href*="/title/"]',
         '.ipc-metadata-list-summary-item__t',
+        # Legacy patterns
         'a.result_text',
         'td.result_text a',
+        # Broad fallback: first anchor pointing to any title page on the /find/ page
+        'a[href^="/title/tt"]',
     ]:
         try:
             link = page.locator(sel).first
-            if await link.is_visible(timeout=2000):
+            if await link.is_visible(timeout=4000):
                 await _move_and_click(page, link, pause_ms=500)
                 await page.wait_for_load_state("domcontentloaded", timeout=15000)
                 await page.wait_for_timeout(1500)
@@ -659,9 +669,10 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
             await context.add_init_script(_CURSOR_SCRIPT)
             page = await context.new_page()
 
-            # Navigate to home — no cookie banner should appear
+            # Navigate to home — no cookie banner should appear.
+            # No cursor movement here: the first real step will move the cursor
+            # purposefully toward its target.
             await _goto(page, HOME_URL)
-            await _human_move(page, 640, 360)
             await page.wait_for_timeout(800)
 
             # Navigate each step, dispatching on interaction_type
@@ -740,8 +751,12 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
                         if await _click_first_find_result(page):
                             clicked = True
                             method_used = "clicked_search_result"
-                    # Build list of locator strategies: text match first, then CSS
-                    is_css = target.startswith(("#", ".", "[", ">")) or " " not in target.strip()
+                    # Build list of locator strategies: text match first, then CSS.
+                    # Only treat target as a CSS selector when it starts with a CSS
+                    # sigil (#, ., [, >).  Single-word labels like "Trivia" or "Awards"
+                    # are text targets, not selectors — the old " " check caused them to
+                    # skip the text-match path and fail silently.
+                    is_css = target.startswith(("#", ".", "[", ">"))
                     locator_attempts = []
                     if not clicked:
                         if not is_css:
@@ -777,10 +792,10 @@ async def record_navigation(steps: list[dict[str, Any]]) -> dict[str, Any]:
                                     await _goto(page, url)
                                     method_used = "navigated"
                             else:
-                                # Failed click: try visible links only (no hamburger open),
-                                # then fall back to direct goto. Avoids the jarring
-                                # "cursor resets to menu" pattern in the video.
-                                nav_ok = await _navigate_via_menu(page, url, use_hamburger=False)
+                                # Failed click: try via menu (including hamburger) so the video
+                                # shows the cursor navigating through the menu rather than the
+                                # page just jumping to the destination silently.
+                                nav_ok = await _navigate_via_menu(page, url, use_hamburger=True)
                                 if not nav_ok:
                                     await _goto(page, url)
                                     method_used = "navigated"

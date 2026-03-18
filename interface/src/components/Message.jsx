@@ -36,6 +36,8 @@ export default function Message({ message }) {
               src={videoUrl}
               controls
               autoPlay
+              muted
+              playsInline
               style={styles.video}
               preload="auto"
             >
@@ -122,6 +124,6 @@ const styles = {
     borderRadius: '6px',
     border: '1px solid #2a3040',
     backgroundColor: '#000',
-    maxHeight: '300px',
+    maxHeight: '460px',
   },
 };
