@@ -364,7 +364,11 @@ class QueryChain:
         # This is more robust than mechanical string substitution.
         _path_hint: str = ""
         if not graph_miss and steps:
-            subject = _extract_subject_title(end_description) or _extract_subject_title(nav_question)
+            # nav_question is tried first: it preserves the user's original capitalization
+            # (e.g. "Amelie"), making proper-noun detection reliable.  end_description
+            # often contains generic navigation terms ("user reviews page") that the
+            # function may return as a false title candidate.
+            subject = _extract_subject_title(nav_question) or _extract_subject_title(end_description)
             if subject:
                 has_title_page = any(
                     re.search(r"/title/tt\d+", step.get("url", "") or "")
