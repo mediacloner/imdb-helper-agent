@@ -707,12 +707,15 @@ class QueryChain:
         lines = []
         for i, step in enumerate(steps):
             description = step.get("description", "Unknown state")
-            url = step.get("url", "")
+            url = step.get("url", "") or ""
             action = step.get("action", {})
             interaction = (action or {}).get("interaction_type", "")
             element = (action or {}).get("target_element_id", "")
             line = f"Step {i + 1}: {description}"
-            if url:
+            # Omit URLs that contain a specific title ID — the LLM must NOT copy
+            # these since the path is for a different title (e.g. Inception).
+            # Only include generic/structural URLs (charts, search pages, etc.).
+            if url and not re.search(r"/title/tt\d+", url):
                 line += f" ({url})"
             if interaction and element and not element.startswith("state_"):
                 line += f" — {interaction} on '{element}'"
