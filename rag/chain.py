@@ -354,23 +354,16 @@ class QueryChain:
                     break
 
         # Detect when the graph path visits a specific title that is NOT what the user
-        # asked about — regardless of whether the path went through a /chart/ hub or a
-        # direct edge.  This covers both:
-        #   • home → /chart/top/ → Inception → trivia   (hub detour)
-        #   • home → Inception → trivia                 (direct wrong-title path)
+        # asked about — regardless of whether the path went through a /chart/ hub or
+        # a direct edge.  Examples: user asks about Amelie but graph returns Inception
+        # path; user asks about Friends trivia but graph returns Breaking Bad trivia.
         #
-        # Strategy — ADAPT the path instead of a full graph miss:
-        #   1. Extract the subject title the user asked about (from end_description).
-        #   2. Check whether that subject appears anywhere in the path steps.
-        #   3. If not → path is using the wrong example title → build an adapted path:
-        #        search for subject → click first result → reuse sub-page click steps
-        #      Sub-page steps (e.g. /trivia, /awards) are converted to click-by-text so
-        #      they work on any title page the recorder lands on after the search.
-        # Guard: don't adapt for chart/ranking queries — the chart path IS the answer.
+        # Strategy: mark as graph_miss and pass the found path as a PATTERN HINT to
+        # the LLM.  The LLM uses the pattern structure (e.g. search → title → reviews)
+        # and generates correct steps for the actual title the user asked about.
+        # This is more robust than mechanical string substitution.
+        _path_hint: str = ""
         if not graph_miss and steps:
-            # Try end_description first (LLM-extracted intent); fall back to the cleaned
-            # question itself.  The LLM often outputs a generic end state like "trivia page"
-            # without including the title name, so the question is the more reliable source.
             subject = _extract_subject_title(end_description) or _extract_subject_title(nav_question)
             if subject:
                 has_title_page = any(
@@ -384,7 +377,6 @@ class QueryChain:
                     )
                     q_wants_chart = any(kw in question.lower() for kw in _CHART_GUARD_WORDS)
                     if not q_wants_chart:
-                        # Check if subject words appear in any step description or URL
                         subject_words = [w for w in subject.lower().split() if len(w) > 2]
                         subject_in_path = any(
                             any(
@@ -395,100 +387,16 @@ class QueryChain:
                             for s in steps
                         )
                         if not subject_in_path:
-                            # Path uses a different title — adapt it.
-                            # Map sub-page path segments to visible IMDb link text so the
-                            # recorder can click by text on any title page.
-                            _SUBPAGE_LABELS: dict[str, str] = {
-                                "fullcredits": "Full Cast & Crew",
-                                "trivia": "Trivia",
-                                "awards": "Awards",
-                                "reviews": "User Reviews",
-                                "ratings": "Ratings",
-                                "plotsummary": "Plot Summary",
-                                "soundtrack": "Soundtrack",
-                                "goofs": "Goofs",
-                                "quotes": "Quotes",
-                                "parentalguide": "Parents Guide",
-                                "episodes": "Episodes",
-                                "releaseinfo": "Release Info",
-                                "companycredits": "Company Credits",
-                                "technical": "Technical Specs",
-                                "keywords": "Keywords",
-                            }
-                            # Find the first title-specific step index
-                            title_start = next(
-                                (i for i, s in enumerate(steps)
-                                 if re.search(r"/title/tt\d+", s.get("url", "") or "")),
-                                None,
+                            # Graph path is for a different title.  Let the LLM produce
+                            # correct steps using the graph pattern as a structural hint.
+                            _path_hint = (
+                                "\n\nI found this navigation pattern in the knowledge graph "
+                                "for a similar query (it uses a different example title — "
+                                "use this STRUCTURE to generate correct steps for the actual "
+                                "title the user asked about, searching for it by name):\n"
+                                + self._format_path_for_llm(steps)
                             )
-                            post_title: list[dict[str, Any]] = []
-                            for s in steps[title_start:] if title_start is not None else []:
-                                url = s.get("url", "") or ""
-                                sub_match = re.search(r"/title/tt\d+/([^/?#]+)", url)
-                                if sub_match:
-                                    # Sub-page → click-by-text (works on any title page)
-                                    sub_path = sub_match.group(1).lower()
-                                    label = _SUBPAGE_LABELS.get(sub_path, sub_path.title())
-                                    post_title.append({
-                                        "description": f"Click {label}",
-                                        "url": "",
-                                        "action": {
-                                            "interaction_type": "click",
-                                            "target_element_id": label,
-                                        },
-                                        "node_id": "",
-                                        "synthetic": True,
-                                    })
-                                elif re.search(r"/title/tt\d+/?$", url):
-                                    # Bare title page — covered by click_result_step, skip
-                                    continue
-                                else:
-                                    post_title.append(dict(s))
-                            search_step: dict[str, Any] = {
-                                "description": f"Search for {subject} on IMDb",
-                                "url": (
-                                    "https://www.imdb.com/find/?q="
-                                    + subject.replace(" ", "+")
-                                    + "&s=tt"
-                                ),
-                                "action": {
-                                    "interaction_type": "search_query",
-                                    "target_element_id": subject,
-                                },
-                                "node_id": "",
-                                "synthetic": True,
-                            }
-                            # Explicit step to land on the title page from /find/.
-                            # Without this, the recorder consumes the first post_title
-                            # click step to auto-navigate away from /find/, leaving
-                            # the actual sub-page interaction unexecuted.
-                            # Friendly target — _click_first_find_result handles the
-                            # actual selector logic when the recorder sees /find/ in the URL.
-                            click_result_step: dict[str, Any] = {
-                                "description": f"Click on {subject} in search results",
-                                "url": "",
-                                "action": {
-                                    "interaction_type": "click",
-                                    "target_element_id": f"{subject} search result",
-                                },
-                                "node_id": "",
-                                "synthetic": True,
-                            }
-                            # Replace steps[0] with a clean home navigate step.
-                            # The original steps[0] carries the graph edge action
-                            # (e.g. "click Top 250 Movies") which would fire before
-                            # the search, sending the recorder to the wrong page.
-                            home_step: dict[str, Any] = {
-                                "description": "IMDb home page",
-                                "url": "https://www.imdb.com/",
-                                "action": {
-                                    "interaction_type": "navigate",
-                                    "target_element_id": None,
-                                },
-                                "node_id": steps[0].get("node_id", ""),
-                                "synthetic": True,
-                            }
-                            steps = [home_step, search_step, click_result_step] + post_title
+                            graph_miss = True
 
         # Graph hit but ALL steps have null interaction_type — partial null check.
         # Already caught if ALL are null above; also miss if MOST are null (≥ 60%),
@@ -650,7 +558,7 @@ class QueryChain:
             # Graph miss: combined answer + steps in ONE call (LLM call #2)
             combined_raw = chat(
                 [{"role": "system", "content": _ANSWER_AND_STEPS_PROMPT},
-                 {"role": "user", "content": f"IMDb context:\n{context_text}\n\nUser question: {nav_question}"}],
+                 {"role": "user", "content": f"IMDb context:\n{context_text}\n\nUser question: {nav_question}{_path_hint}"}],
                 response_format="json",
             )
             combined = self._parse_json_object(combined_raw)
