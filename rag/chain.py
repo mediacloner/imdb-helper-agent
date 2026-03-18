@@ -648,6 +648,8 @@ class QueryChain:
             url = re.sub(r"<(tt_id|movie_id|title_id|tt\w*id\w*)>", "tt1375666", url, flags=re.IGNORECASE)
             url = re.sub(r"<(nm_id|actor_id|person_id|nm\w*id\w*)>", "nm0186505", url, flags=re.IGNORECASE)
             action = item.get("action") or {}
+            if not isinstance(action, dict):
+                action = {}
             itype = action.get("interaction_type")
             target = action.get("target_element_id") or ""
             description = item.get("description", f"Step {i + 1}")
